@@ -15,6 +15,7 @@ const ADMIN_FNS = {
   a_pay: { p_person: NIL, p_cents: 1 },
   a_fix: { p_person: NIL, p_cents: 1 },
   a_cash: { p_cents: 1 },
+  a_cash_box: { p_cents: 1 },
   a_count: { p_items: [] },
   a_purchase: { p_day: '2020-01-01', p_store: 'x', p_items: [] },
   a_waste: { p_product: NIL, p_qty: 1 },

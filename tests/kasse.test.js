@@ -35,8 +35,14 @@ module.exports = async function kasse(browser) {
     await tab('kasse'); await hideToast(page);
     await page.locator('#app [data-a="a-cash"]').click();
     await fillModal(page, 'Kassensturz', { c: amount });
-    await page.waitForFunction(() => { const t = document.querySelector('#toast'); return !t.hidden && /Gebucht|Achtung/.test(t.textContent); });
-    const txt = await page.locator('#toast').innerText();
+    // Normalfall: kurzer Hinweis. Fehlt Geld: Dialog „Achtung: Es fehlt Geld“, der mit „Verstanden“ bestätigt wird.
+    await page.waitForFunction(() => { const t = document.querySelector('#toast'), m = document.querySelector('#modal h2');
+      return (!t.hidden && /Gebucht/.test(t.textContent)) || (m && /Achtung/.test(m.textContent)); });
+    let txt;
+    if (await page.locator('#modal h2', { hasText: 'Achtung' }).count()) {
+      txt = (await page.locator('#modal').innerText()).replace(/\s+/g, ' ').trim();
+      await page.locator('#modal button.pri', { hasText: 'Verstanden' }).click();
+    } else txt = await page.locator('#toast').innerText();
     await idle(page);
     return txt;
   };
@@ -52,6 +58,8 @@ module.exports = async function kasse(browser) {
     await idle(page);
     return t;
   };
+  /* Im Hintergrund (hinter dem Warndialog) steht die neueste Barverkaufs-Zeile schon im Kassenbuch. */
+  const rowHasBar = async cents => { const c = await last(); eq((await barRow(c.id)).in_cents, cents, 'Kassenbuch Barverkäufe zum letzten Kassensturz'); };
   let stand0 = 0, plus = 0, ware = 0;
   const standIs = async () => { await tab('bon'); await lnIs(page, 'KASSENSTAND', eur(stand0 + plus)); };
 
@@ -110,7 +118,9 @@ module.exports = async function kasse(browser) {
   });
   await S('Kasse kleiner als gebuchte Zahlungen: Warnhinweis, bar negativ, Kassenbuch-Zeile mit 0', async () => {
     await pay('Gerd', '5,00'); plus += 500;
-    eq(await sturz('3,00'), 'Achtung: In der Kasse waren 3,00 €, du hast aber 5,00 € Schuldschein-Zahlungen gebucht. Es fehlen 2,00 €.', 'Hinweis');
+    const dlg = await sturz('3,00');
+    expect(/^ACHTUNG: ES FEHLT GELD |^Achtung: Es fehlt Geld /.test(dlg), 'Kein Warndialog, sondern: ' + dlg);
+    for (const t of ['In der Kasse waren 3,00 €.', 'aber 5,00 € Schuldschein-Zahlungen gebucht', 'Es fehlen 2,00 €.', 'Als Barverkauf wurden 0,00 € gebucht.']) expect(dlg.includes(t), `Im Warndialog fehlt „${t}“: ${dlg}`);
     const c = await last();
     eq(`${c.cents}/${c.bar_cents}`, '300/-200', 'Kassensturz (Inhalt/bar)');
     const j = await barRow(c.id);
@@ -149,8 +159,8 @@ module.exports = async function kasse(browser) {
     await lnIs(page, 'Fehlbetrag letzte Zählung', eur(wasser.price_cents - 380));
   });
   await S('Kassensturz: negativer Betrag wird abgelehnt (direkter Aufruf)', async () => {
-    const r = await rpc('a_cash', { p_cents: -1 });
-    expect(r.error && /nicht erlaubt/.test(r.error), 'a_cash(-1): ' + JSON.stringify(r));
+    const r = await rpc('a_cash_box', { p_cents: -1 });
+    expect(r.error && /nicht erlaubt/.test(r.error), 'a_cash_box(-1): ' + JSON.stringify(r));
     eq((await counts()).length, 6, 'Anzahl Kassenstürze');
   });
 
@@ -247,16 +257,44 @@ module.exports = async function kasse(browser) {
     eq(JSON.stringify(await rpc('a_storno', { p_journal: NIL })), '{"data":"fehlt"}', 'Storno einer unbekannten Buchung');
     eq((await db('journal', 'id')).length, n, 'Anzahl Kassenbuch-Zeilen');
   });
-  await S('Warnhinweis beim Kassensturz bleibt lange genug lesbar (mindestens 6 Sekunden)', async () => {
+  await S('Warnung bei zu wenig Geld bleibt stehen, bis „Verstanden“ getippt wird', async () => {
     await pay('Gerd', '9,00'); plus += 900;
     await tab('kasse'); await hideToast(page);
     await page.locator('#app [data-a="a-cash"]').click();
     await fillModal(page, 'Kassensturz', { c: '1,00' });
-    await page.waitForFunction(() => { const t = document.querySelector('#toast'); return !t.hidden && /Achtung/.test(t.textContent); });
-    const t0 = Date.now();
-    await page.waitForFunction(() => document.querySelector('#toast').hidden, null, { timeout: 30000 });
-    const ms = Date.now() - t0;
-    expect(ms >= 6000, `Der Warnhinweis (rund 130 Zeichen) verschwand nach ${(ms / 1000).toFixed(1)} Sekunden von selbst`);
+    await page.locator('#modal h2', { hasText: 'Achtung: Es fehlt Geld' }).waitFor();
+    await page.waitForTimeout(5000);
+    expect(await page.locator('#modal h2', { hasText: 'Achtung: Es fehlt Geld' }).isVisible(), 'Warnung ist nach 5 Sekunden von selbst verschwunden');
+    await see(page, 'Es fehlen 9,00 €.', '#modal');   // 9,00 + 1,00 (Zahlung vor dem stornierten Kassensturz) gegen 1,00 in der Kasse
+    await rowHasBar(0);
+    await page.locator('#modal button.pri', { hasText: 'Verstanden' }).click();
+    await page.waitForFunction(() => document.querySelector('#modal').hidden);
+    await standIs();
+  });
+  await S('Mischfall: Kassensturz mit der alten Funktion, danach Zahlung, danach Kassensturz nach Kasseninhalt', async () => {
+    const n = (await counts()).length;
+    const r = await rpc('a_cash', { p_cents: 300 });
+    expect(!r.error, 'a_cash(300): ' + r.error);
+    const c = await last();
+    eq(`${c.cents}/${c.bar_cents}`, '300/300', 'alter Kassensturz (Inhalt/bar)');
+    const j = await barRow(c.id);
+    eq(`${j.text}/${j.in_cents}/${j.kind}`, 'Barverkäufe/300/bar', 'Kassenbuch-Zeile des alten Kassensturzes');
+    plus += 300;
+    await page.reload(); await see(page, 'KASSENSTAND');
+    await pay('Gerd', '2,00'); plus += 200;
+    eq(await sturz('10,00'), 'Gebucht: 8,00 € Barverkäufe, 2,00 € waren Schuldschein-Zahlungen.', 'Hinweis');
+    eq((await counts()).length, n + 2, 'Anzahl Kassenstürze');
+    plus += 800; await standIs();
+  });
+  await S('Zählung zwischen zwei Kassenstürzen am selben Tag zählt für den zweiten (Fehlbetrag 0,00)', async () => {
+    const cola = await product('Cola');
+    const r = await rpc('a_count', { p_items: [{ id: cola.id, qty: cola.stock - 1 }] });
+    expect(!r.error, 'Zählung: ' + r.error);
+    await page.reload(); await see(page, 'KASSENSTAND');
+    eq(await sturz(eur(cola.price_cents)), `Gebucht: ${eur(cola.price_cents)} € Barverkäufe.`, 'Hinweis');
+    plus += cola.price_cents;
+    await tab('bon');
+    await lnIs(page, 'Fehlbetrag letzte Zählung', '0,00');   // 1 Cola fehlt laut Zählung, genau ihr Preis lag in der Kasse
   });
   await S('Keine Fehler in der Browser-Konsole (Kassensturz und Storno)', async () => {
     const real = page.problems.filter(p => !/favicon|nicht erlaubt|status of 400/i.test(p));
