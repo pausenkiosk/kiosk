@@ -2,7 +2,7 @@
 /* Verwalter-Bereich komplett: Anmeldung, Bon, Regal (inkl. Löschen), Fotos, Einkauf (von Hand, Ansage, Bon-Foto),
    Haltbarkeit, Kasse, Leute, Sicherung, Nachricht an Claude.
    Läuft nach dem Kollegen-Teil: Ben hat 1 Wasser angeschrieben (0,80 €), Clara ist gesperrt. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, row, prow, rowHas, lnIs, anonApi, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, row, prow, rowHas, lnIs, anonApi, sql, isoDay } = require('./lib');
 
 const dshort = iso => { const [, m, d] = iso.split('-'); return `${d}.${m}.`; };
 
@@ -298,7 +298,7 @@ module.exports = async function verwalter(browser) {
       tick();
     });
     await page.locator('#foto').setInputFiles(Array.from({ length: 61 }, (_, i) => ({ name: `f${i}.png`, mimeType: 'image/png', buffer: tiny })));
-    await toast(page, /^60 Fotos gespeichert\./, 180000);
+    await toast(page, /^60 von 61 Fotos gespeichert, mehr als 60 auf einmal gehen nicht\. Den Rest bitte danach hochladen\.$/, 180000);
     await rowHas(page, 'Foto vom', /wartet auf Auswertung/);
     const j = await db('photo_jobs', 'paths', 'status', 'neu');
     eq(j.length, 1, 'offene Foto-Aufträge'); eq(j[0].paths.length, 60, 'Fotos im Auftrag');
@@ -308,14 +308,36 @@ module.exports = async function verwalter(browser) {
     const seen = await page.evaluate(() => { cancelAnimationFrame(window.__raf); return window.__seen; });
     expect(seen.some(t => /^Foto \d+ von 60 wird hochgeladen …$/.test(t)), 'Kein Fortschritt gesehen: ' + seen.slice(0, 5).join(' | '));
   });
-  await S('Fotos: Hinweis „Es werden die ersten 60 Fotos hochgeladen.“ ist zu sehen', async () => {
-    const seen = await page.evaluate(() => window.__seen);
-    expect(seen.includes('Es werden die ersten 60 Fotos hochgeladen.'), 'Der Hinweis war in keinem Bild sichtbar. Gesehen: ' + seen.slice(0, 3).join(' | ') + ' …');
-  });
   await S('Fotos: Auftrag mit 60 Fotos löschen räumt den Speicher', async () => {
     await row(page, 'Foto vom').locator('[data-a="a-jobdel"]').click();
     await page.waitForFunction(() => !document.querySelector('#app').textContent.includes('Foto vom'), null, { timeout: 60000 });
     eq((await stored()).length, 0, 'Fotos im Speicher nach dem Löschen');
+  });
+
+  await S('Fotos: verwaiste alte Dateien werden beim Laden entfernt, frische und solche in Aufträgen bleiben', async () => {
+    await upload(['bleibt.png']);
+    await toast(page, /1 Foto gespeichert\./, 45000);
+    await rowHas(page, 'Foto vom', /wartet auf Auswertung/);
+    const inJob = (await db('photo_jobs', 'paths', 'status', 'neu'))[0].paths[0];
+    await page.evaluate(async () => {
+      for (const n of ['foto/waise-alt.jpg', 'einkauf/waise-alt.jpg', 'foto/waise-frisch.jpg']) {
+        const { error } = await SB.storage.from('fotos').upload(n, new Blob(['x'], { type: 'image/jpeg' }), { contentType: 'image/jpeg' });
+        if (error) throw new Error(error.message);
+      }
+    });
+    // Alter lässt sich nur direkt in der Datenbank nachstellen: zwei Waisen und das Foto im Auftrag sind „2 Stunden alt“.
+    await sql(`update storage.objects set created_at = now() - interval '2 hours' where bucket_id = 'fotos' and name in ('foto/waise-alt.jpg', 'einkauf/waise-alt.jpg', '${inJob}')`);
+    eq((await stored()).length, 4, 'Dateien vor dem Aufräumen');
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+    let now = [];
+    for (let i = 0; i < 40; i++) { now = await stored(); if (!now.some(n => n.includes('waise-alt'))) break; await page.waitForTimeout(500); }
+    eq(now.slice().sort().join(','), [inJob, 'foto/waise-frisch.jpg'].sort().join(','), 'Dateien nach dem Aufräumen');
+    await tab('regal');
+    await row(page, 'Foto vom').locator('[data-a="a-jobdel"]').click();
+    await page.waitForFunction(() => !document.querySelector('#app').textContent.includes('Foto vom'));
+    await page.evaluate(async () => { await SB.storage.from('fotos').remove(['foto/waise-frisch.jpg']); });
+    eq((await stored()).length, 0, 'Fotos im Speicher am Ende');
   });
 
   /* ---------- Einkauf ---------- */
@@ -345,6 +367,16 @@ module.exports = async function verwalter(browser) {
     await fillCart(0, 'Schokoriegel', '10', '', '');
     await act('a-buy');
     await toast(page, /Bitte Stückzahl und Gesamtpreis für jede Zeile eintragen\./);
+    await hideToast(page);
+    await fillCart(0, 'Schokoriegel', '10', '7,90', '');
+    await fillCart(1, null, '3', '', '');
+    await act('a-buy');
+    await toast(page, /In einer Zeile mit Stückzahl oder Preis fehlt das Produkt\. Bitte auswählen oder die Zeile leeren\./);
+    await hideToast(page);
+    await fillCart(1, null, '', '2,00', '');
+    await act('a-buy');
+    await toast(page, /In einer Zeile mit Stückzahl oder Preis fehlt das Produkt/);
+    await fillCart(1, null, '', '', '');
     eq((await db('purchases', 'id')).length, 0, 'gespeicherte Einkäufe');
   });
   await S('Einkauf mit Haltbarkeitsdatum speichern', async () => {
@@ -410,6 +442,34 @@ module.exports = async function verwalter(browser) {
     await tab('regal');
     await rowHas(page, 'Schokoriegel', /%/);
   });
+  await S('Preisliste: am Bildschirm unsichtbar, Knopf öffnet den Druckdialog', async () => {
+    const sheet = page.locator('#app .paper.sheet.printonly');
+    eq(await sheet.count(), 1, 'Preislisten im Regal');
+    expect(!(await sheet.isVisible()), 'Preisliste ist am Bildschirm sichtbar');
+    await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+    await page.locator('#app button', { hasText: 'Preisliste drucken' }).click();
+    await page.waitForFunction(() => window.__printed === 1);
+  });
+  await S('Preisliste im Druck: nur aktive Produkte nach Gruppen, Abverkauf mit durchgestrichenem Normalpreis, sonst nichts', async () => {
+    await page.emulateMedia({ media: 'print' });
+    try {
+      const sheet = page.locator('#app .paper.sheet.printonly');
+      expect(await sheet.isVisible(), 'Preisliste ist im Druck nicht sichtbar');
+      const visible = await page.locator('#app .paper').evaluateAll(ps => ps.filter(p => getComputedStyle(p).display !== 'none').length);
+      eq(visible, 1, 'sichtbare Abschnitte im Druck');
+      expect(!(await page.locator('#nav').isVisible()), 'Leiste ist im Druck sichtbar');
+      expect(!(await page.locator('#app [data-a="a-cnt"]').isVisible()), 'Knöpfe sind im Druck sichtbar');
+      await see(page, 'Preisliste · Stand', '#app .sheet');
+      eq((await sheet.locator('h2').allTextContents()).join('|'), 'Getränke|Kaltgetränke|Süßes', 'Gruppen');
+      const lines = await sheet.locator('.ln').evaluateAll(ls => ls.map(l => l.children[0].textContent + ': ' + l.children[1].innerHTML));
+      eq(lines.join(' ; '), 'Wasser: 0,80 € ; Cola: 1,60 € ; Gummibärchen: 1,20 € ; Schokoriegel: <s>1,00</s> 0,50 € ; Testkeks: 0,90 €', 'Zeilen der Preisliste');
+      const txt = await sheet.innerText();
+      expect(!txt.includes('Kaffee'), 'Nicht sichtbares Produkt steht auf der Preisliste');
+      expect(!/Anna|Ben|Clara|Emil|Gerd/.test(txt), 'Personennamen auf der Preisliste');
+      const all = await page.evaluate(() => document.body.innerText);
+      expect(!/St · |Rot unter|Antippen zum Bearbeiten/.test(all), 'Im Druck steht mehr als die Preisliste: ' + all.slice(0, 200));
+    } finally { await page.emulateMedia({ media: 'screen' }); }
+  });
   await S('Haltbarkeit: Kollegen sehen den Abverkaufspreis', async () => {
     const api = await anonApi();
     const names = await (await api.post('/rest/v1/rpc/k_names', { data: { p_code: CFG.code } })).json();
@@ -472,6 +532,12 @@ module.exports = async function verwalter(browser) {
     expect(/^Gummibärchen \d\d\.\d\d\. \((9|10) T\)/.test(t2), 'Haltbarkeitszeile ohne „0 St“ erwartet, tatsächlich: ' + t2);
     await idle(page); await hideToast(page);
     await row(page, d10).locator('[data-a="a-mhd"]').click();
+    await fillModal(page, 'Gummibärchen', { a: 'waste', x: '' });
+    await toast(page, /Bitte die entsorgte Stückzahl eintragen\./);
+    await idle(page);
+    eq((await db('sales', 'id', 'kind', 'verlust')).length, 1, 'Verlustbuchungen (nur die vom Schokoriegel)');
+    await hideToast(page);
+    await row(page, d10).locator('[data-a="a-mhd"]').click();
     await fillModal(page, 'Gummibärchen', { a: 'done', x: '' });
     await see(page, 'Keine offenen Haltbarkeitsdaten.');
     eq((await product('Gummibärchen')).stock, 0, 'Bestand Gummibärchen');
@@ -501,7 +567,7 @@ module.exports = async function verwalter(browser) {
     // Die Auswertung macht sonst Claude. Hier wird ihr Ergebnis nachgestellt.
     await page.evaluate(async ([day, mhd]) => {
       const id = async n => (await SB.from('products').select('id').eq('name', n)).data[0].id;
-      const result = { store: 'Testbon-Markt', day, items: [{ id: await id('Cola'), qty: 12, cents: 948, mhd }, { id: await id('Wasser'), qty: 6, cents: 300 }] };
+      const result = { store: 'Testbon-Markt', day, items: [{ id: await id('Cola'), qty: 12, cents: 948, mhd }, { id: await id('Wasser'), qty: 6, cents: 300 }, { id: '00000000-0000-0000-0000-000000000000', qty: 2, cents: 100 }] };
       const { error } = await SB.from('photo_jobs').update({ status: 'vorschlag', result, note: 'Preis Wasser geschätzt' }).eq('kind', 'einkauf');
       if (error) throw new Error(error.message);
     }, [isoDay(), isoDay(40)]);
@@ -514,9 +580,17 @@ module.exports = async function verwalter(browser) {
     await see(page, 'Hinweis von Claude: Preis Wasser geschätzt');
     eq(await page.inputValue('#estore'), 'Testbon-Markt', 'Laden');
     eq(await page.inputValue('#eday'), isoDay(), 'Datum');
-    eq(await page.locator('#cart .cart').count(), 2, 'Zeilen');
+    eq(await page.locator('#cart .cart').count(), 3, 'Zeilen');
     const vals = await page.locator('#cart .cart').evaluateAll(rs => rs.map(r => [r.querySelector('select').selectedOptions[0].textContent, ...[...r.querySelectorAll('input')].map(i => i.value)].join('|')));
-    eq(vals.join(' ; '), `Cola|12|9,48|${isoDay(40)} ; Wasser|6|3,00|`, 'vorbelegte Zeilen');
+    eq(vals.join(' ; '), `Cola|12|9,48|${isoDay(40)} ; Wasser|6|3,00| ; Produkt …|2|1,00|`, 'vorbelegte Zeilen');
+  });
+  await S('Einkauf per Vorschlag: Zeile mit unbekanntem Produkt verhindert das Speichern', async () => {
+    await hideToast(page);
+    await act('a-buy');
+    await toast(page, /In einer Zeile mit Stückzahl oder Preis fehlt das Produkt/);
+    eq((await db('journal', 'id', 'text', 'Einkauf Testbon-Markt')).length, 0, 'gebuchte Einkäufe');
+    await see(page, 'Vorschlag prüfen');
+    await fillCart(2, null, '', '', '');
   });
   await S('Einkauf per Vorschlag: Speichern bucht den Einkauf und schließt den Auftrag ab', async () => {
     await hideToast(page);
@@ -586,10 +660,11 @@ module.exports = async function verwalter(browser) {
   await S('Kasse: Kassensturz bucht die Barverkäufe', async () => {
     await hideToast(page);
     await act('a-cash');
+    await see(page, 'Wie viel Geld war in der Kasse?', '#modal');
     await fillModal(page, 'Kassensturz', { c: '3,00' });
-    await toast(page, /Kassensturz gebucht\./);
+    await toast(page, /^Gebucht: 3,00 € Barverkäufe\.$/);
     await rowHas(page, 'Barverkäufe', /3,00/);
-    eq(JSON.stringify(await db('cash_counts', 'day,cents')), JSON.stringify([{ day: isoDay(), cents: 300 }]), 'Kassensturz in der Datenbank');
+    eq(JSON.stringify(await db('cash_counts', 'day,cents,bar_cents')), JSON.stringify([{ day: isoDay(), cents: 300, bar_cents: 300 }]), 'Kassensturz in der Datenbank');
   });
   await S('Kasse: Kassensturz – Abbrechen und leere Eingabe buchen nichts', async () => {
     await act('a-cash');
@@ -615,14 +690,14 @@ module.exports = async function verwalter(browser) {
     await act('a-jour');
     await fillModal(page, 'Buchung von Hand', { d: isoDay(-1), t: 'Testregal', o: '1.234,56' });
     await rowHas(page, 'Testregal', /−1\.234,56/);
-    const j = await db('journal', 'day,in_cents,out_cents,source', 'text', 'Testregal');
-    eq(JSON.stringify(j), JSON.stringify([{ day: isoDay(-1), in_cents: 0, out_cents: 123456, source: 'hand' }]), 'Buchung in der Datenbank');
+    const j = await db('journal', 'day,in_cents,out_cents,source,kind', 'text', 'Testregal');
+    eq(JSON.stringify(j), JSON.stringify([{ day: isoDay(-1), in_cents: 0, out_cents: 123456, source: 'hand', kind: 'hand' }]), 'Buchung in der Datenbank');
   });
   await S('Kasse: Buchung von Hand ohne Text wird nicht gespeichert', async () => {
     await act('a-jour');
     await fillModal(page, 'Buchung von Hand', { t: '', i: '5' });
     await idle(page);
-    eq((await db('journal', 'id', 'source', 'hand')).length, 4, 'Anzahl Hand-Buchungen');   // 2 aus den Testdaten + 2 neue
+    eq((await db('journal', 'id', 'source', 'hand')).length, 3, 'Anzahl Hand-Buchungen');   // 1 aus den Testdaten + 2 neue
   });
   await S('Bereichswechsel geht auch, während noch gespeichert wird; andere Knöpfe melden „Einen Moment“', async () => {
     await act('a-jour');
@@ -827,6 +902,107 @@ module.exports = async function verwalter(browser) {
     expect(!(await page.locator('#app .paper').first().isVisible()), 'Schuldscheine (Namen und Beträge) sind im Druck sichtbar');
     await page.emulateMedia({ media: 'screen' });
   });
+  /* ---------- QR-Code erneuern ---------- */
+  const setting = async k => ((await db('settings', 'value', 'key', k))[0] || {}).value;
+  const setCodeAge = async days => {
+    await page.evaluate(async day => { const { error } = await SB.from('settings').upsert({ key: 'kiosk_code_at', value: day }); if (error) throw new Error(error.message); }, isoDay(-days));
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+  };
+  await S('QR-Code: unter 30 Tagen kein Hinweis auf dem Bon', async () => {
+    await setCodeAge(29);
+    await see(page, 'KASSENSTAND');
+    expect(!(await page.locator('#app').innerText()).toLowerCase().includes('qr-code erneuern'), 'Hinweis erscheint schon nach 29 Tagen');
+  });
+  await S('QR-Code: ab 30 Tagen Hinweis „QR-Code erneuern“ auf dem Bon, Knopf führt zu Leute', async () => {
+    await setCodeAge(30);
+    await see(page, 'QR-Code erneuern');
+    await see(page, 'Der QR-Code am Kiosk ist 30 Tage alt.');
+    await page.locator('#app button', { hasText: 'Zu Leute' }).click();
+    await page.locator('#nav [data-t="leute"].on').waitFor();
+    await see(page, 'Schuldscheine');
+  });
+  const kpage = await newPage(browser);
+  await S('QR-Code: Vorbereitung – Kollegin Anna meldet sich mit dem alten Code an', async () => {
+    await kpage.goto(`${CFG.url}?k=${CFG.code}`);
+    await kpage.locator('.namegrid button', { hasText: /^Anna$/ }).click();
+    await kpage.fill('#pin', '1111');
+    await kpage.locator('#kpin button.pri').click();
+    await see(kpage, 'Schuldschein von Anna');
+  });
+  await S('QR-Code erneuern: Sicherheitsabfrage, Abbrechen lässt den Code unverändert', async () => {
+    await act('a-newcode');
+    await page.locator('#modal h2', { hasText: 'Neuen QR-Code erzeugen?' }).waitFor();
+    await see(page, 'werden sofort ungültig', '#modal');
+    await page.locator('#modal [data-a="m-x"]').click();
+    await idle(page);
+    eq(await setting('kiosk_code'), CFG.code, 'Kiosk-Code nach Abbrechen');
+  });
+  let newCode = null;
+  await S('QR-Code erneuern: neuer Code, neuer Link, neues QR-Bild, Datum von heute', async () => {
+    const oldSrc = await page.locator('#app .qr img').getAttribute('src');
+    await hideToast(page);
+    await act('a-newcode');
+    await fillModal(page, 'Neuen QR-Code erzeugen?', {});
+    await toast(page, /^Neuer QR-Code erzeugt\. Bitte den Aushang neu drucken\.$/);
+    await idle(page);
+    const code = await setting('kiosk_code');
+    expect(/^[0-9a-f]{16}$/.test(code) && code !== CFG.code, 'Neuer Code unerwartet: Länge ' + String(code).length);
+    newCode = code;
+    eq(await setting('kiosk_code_at'), isoDay(), 'Datum des Codes');
+    eq((await page.locator('#app .poster p.brk').innerText()).trim(), CFG.url + '?k=' + code, 'angezeigter Link');
+    expect(await page.locator('#app .qr img').getAttribute('src') !== oldSrc, 'QR-Bild hat sich nicht geändert');
+    await tab('bon');
+    expect(!(await page.locator('#app').innerText()).toLowerCase().includes('qr-code erneuern'), 'Hinweis steht nach dem Erneuern noch auf dem Bon');
+    await tab('leute');
+  });
+  await S('QR-Code erneuern: alter Code ist sofort ungültig, neuer gilt', async () => {
+    expect(newCode, 'kein neuer Code aus dem vorigen Schritt');
+    const api = await anonApi();
+    const old = await (await api.post('/rest/v1/rpc/k_names', { data: { p_code: CFG.code } })).json();
+    eq(old, null, 'Namensliste mit altem Code');
+    const anna = await person('Anna');
+    const l1 = await (await api.post('/rest/v1/rpc/k_login', { data: { p_code: CFG.code, p_person: anna.id, p_pin: '1111' } })).json();
+    expect(l1.ok === false && l1.err === 'code', 'Anmeldung mit altem Code: ' + JSON.stringify(l1));
+    const names = await (await api.post('/rest/v1/rpc/k_names', { data: { p_code: newCode } })).json();
+    expect(Array.isArray(names) && names.some(n => n.vorname === 'Anna'), 'Namensliste mit neuem Code: ' + JSON.stringify(names).slice(0, 100));
+    const l2 = await (await api.post('/rest/v1/rpc/k_login', { data: { p_code: newCode, p_person: anna.id, p_pin: '1111' } })).json();
+    expect(l2.ok === true, 'Anmeldung mit neuem Code: ' + JSON.stringify(l2));
+    await api.post('/rest/v1/rpc/k_logout', { data: { p_token: l2.token } });
+    await api.dispose();
+  });
+  await S('QR-Code erneuern: angemeldete Kollegin bleibt angemeldet und kann weiter anschreiben', async () => {
+    const before = await saldo('Anna');
+    await kpage.reload();
+    await see(kpage, 'Schuldschein von Anna');
+    await kpage.locator('button.it', { hasText: 'Wasser' }).click();
+    await fillModal(kpage, 'Wasser', { qty: 1 });
+    await toast(kpage, /Wasser angeschrieben/);
+    eq(await saldo('Anna'), before + 80, 'Schuldschein Anna nach dem Anschreiben');
+  });
+  await S('QR-Code erneuern: nach dem Abmelden geht es mit dem alten Link nicht mehr, mit dem neuen schon', async () => {
+    await idle(kpage);
+    await kpage.locator('[data-a="k-logout"]').click();
+    await see(kpage, 'Dieser QR-Code ist nicht mehr gültig');
+    await kpage.goto(`${CFG.url}?k=${CFG.code}`);
+    await see(kpage, 'Dieser QR-Code ist nicht mehr gültig');
+    expect(newCode, 'kein neuer Code');
+    await kpage.goto(`${CFG.url}?k=${newCode}`);
+    await see(kpage, 'Wer bist du?');
+    eq(await kpage.locator('.namegrid button', { hasText: /^Anna$/ }).count(), 1, 'Anna in der Namensliste');
+  });
+  await kpage.context().close();
+  await S('QR-Code: Aushang druckt weiterhin nur den Aushang (mit neuem Code)', async () => {
+    await tab('leute');
+    await page.emulateMedia({ media: 'print' });
+    try {
+      const visible = await page.locator('#app .paper').evaluateAll(ps => ps.filter(p => getComputedStyle(p).display !== 'none').map(p => p.className));
+      eq(visible.join('|'), 'paper poster sheet', 'sichtbare Abschnitte im Druck');
+      const all = await page.evaluate(() => document.body.innerText);
+      expect(!/Preisliste|Rangliste|Schuldscheine|Emil|Gerd/.test(all), 'Im Druck steht mehr als der Aushang: ' + all.slice(0, 200));
+      expect(await page.locator('#app .qr img').isVisible(), 'QR-Code im Druck nicht sichtbar');
+    } finally { await page.emulateMedia({ media: 'screen' }); }
+  });
   await S('Leute: Verwalter sieht keine PIN-Prüfwerte', async () => {
     const r = await page.evaluate(async () => { const { data, error } = await SB.from('persons').select('pin_hash').limit(1); return { data, error: error && error.message }; });
     expect(r.error && !r.data, 'PIN-Prüfwert lesbar: ' + JSON.stringify(r));
@@ -845,13 +1021,20 @@ module.exports = async function verwalter(browser) {
       eq(data[t].length, (await db(t, 'id')).length, 'Zeilen in der Sicherung: ' + t);
     }
     expect(data.persons.every(p => !('pin_hash' in p) && p.vorname), 'Personen enthalten PIN-Prüfwerte oder keinen Vornamen');
-    expect(!/pin_hash|kiosk_code|setup_code/.test(txt) && !txt.includes(CFG.code), 'Sicherung enthält PIN-Prüfwert oder Kiosk-Code');
+    const codeNow = await setting('kiosk_code');
+    expect(!/pin_hash|setup_code/.test(txt) && !data.settings.some(x => x.key === 'kiosk_code') && !txt.includes(CFG.code) && !txt.includes(codeNow), 'Sicherung enthält PIN-Prüfwert oder Kiosk-Code');
     expect(!/token_hash|encrypted_password/.test(txt), 'Sicherung enthält Sitzungs- oder Anmeldedaten');
     await toast(page, /Sicherung erstellt\./);
   });
   await S('Sicherung: Bon zeigt das Datum der letzten Sicherung', async () => {
-    await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay())} (vor 0 Tagen).`);
+    await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay())} (heute).`);
     expect(!(await page.locator('#app').innerText()).includes('Bitte jetzt sichern'), 'Mahnung trotz frischer Sicherung');
+  });
+  await S('Sicherung: „gestern“ statt „vor 1 Tagen“', async () => {
+    await page.evaluate(async day => { await SB.from('settings').upsert({ key: 'backup_at', value: day }); }, isoDay(-1));
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+    await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay(-1))} (gestern).`);
   });
   await S('Sicherung: älter als 14 Tage wird angemahnt', async () => {
     await page.evaluate(async day => { await SB.from('settings').upsert({ key: 'backup_at', value: day }); }, isoDay(-20));
@@ -901,7 +1084,7 @@ module.exports = async function verwalter(browser) {
       { const { data, error } = await SB.from('products').update({ price_cents: 1 }).eq('name', 'Cola').select(); out.write['products ändern'] = error || !data.length ? 'gesperrt' : 'ERLAUBT'; }
       const nil = '00000000-0000-0000-0000-000000000000';
       const fns = { a_person: { p_vorname: 'Eindringling', p_pin: '0000' }, a_persons: { p_names: ['Eindringling'] }, a_pin: { p_person: nil, p_pin: '0000' }, a_person_delete: { p_person: nil },
-        a_pay: { p_person: nil, p_cents: 1 }, a_fix: { p_person: nil, p_cents: 1 }, a_cash: { p_cents: 1 }, a_count: { p_items: [] }, a_purchase: { p_day: '2020-01-01', p_store: 'x', p_items: [] }, a_waste: { p_product: nil, p_qty: 1 } };
+        a_pay: { p_person: nil, p_cents: 1 }, a_fix: { p_person: nil, p_cents: 1 }, a_cash: { p_cents: 1 }, a_count: { p_items: [] }, a_purchase: { p_day: '2020-01-01', p_store: 'x', p_items: [] }, a_waste: { p_product: nil, p_qty: 1 }, a_storno: { p_journal: nil } };
       for (const [f, a] of Object.entries(fns)) { const { error } = await SB.rpc(f, a); out.fn[f] = error ? error.message : 'ERLAUBT'; }
       { const { data } = await SB.storage.from('fotos').list('regal'); out.read.fotos = data ? data.length : 'gesperrt'; }
       { const { error } = await SB.storage.from('fotos').upload('regal/eindringling.jpg', new Blob(['x'], { type: 'image/jpeg' })); out.write.fotos = error ? 'gesperrt' : 'ERLAUBT'; }

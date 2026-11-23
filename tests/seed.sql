@@ -4,7 +4,7 @@ truncate settings, admins, persons, sessions, products, sales, ledger, journal, 
   counts, cash_counts, wishes, wish_votes, alerts, requests, photo_jobs cascade;
 delete from auth.users where email = '__ADMIN_EMAIL__';
 
-insert into settings(key, value) values ('kiosk_code', '__KIOSK_CODE__');
+insert into settings(key, value) values ('kiosk_code', '__KIOSK_CODE__'), ('kiosk_code_at', today()::text);
 
 insert into products(name, category, price_cents, stock, active, created_at) values
   ('Cola',         'Getränke', 150, 12, true,  now() - interval '60 days'),
@@ -28,10 +28,11 @@ insert into ledger(person_id, day, amount_cents, kind)
   select id, today() - 50, 300, 'kauf' from persons where vorname = 'Gerd';
 
 -- Kassenstand: 50,00 - 23,50 + 10,00 - 3,00 = 33,50
-insert into journal(day, text, in_cents, out_cents, source) values
-  (today(),       'Startgeld',     5000,    0, 'hand'),
-  (today() - 40,  'Einkauf Rewe',     0, 2350, 'app'),
-  (today() - 400, 'Altbestand',    1000,  300, 'hand');
+-- kind wie nach der Umstellung auf Ausbaustufe 3: alter Einkauf ohne Verweis, alte Excel-Zeile
+insert into journal(day, text, in_cents, out_cents, source, kind) values
+  (today(),       'Startgeld',     5000,    0, 'hand',  'hand'),
+  (today() - 40,  'Einkauf Rewe',     0, 2350, 'app',   'einkauf'),
+  (today() - 400, 'Altbestand',    1000,  300, 'excel', 'excel');
 
 -- Test-Verwalter und ein zweites Konto OHNE Verwalter-Rechte (für die Gegenprobe)
 delete from auth.users where email = '__GAST_EMAIL__';

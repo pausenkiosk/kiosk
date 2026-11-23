@@ -10,7 +10,9 @@ export KIOSK_TEST_REF=…        # Kennung des Testprojekts
 export KIOSK_TEST_KEY=…        # öffentlicher Schlüssel des Testprojekts
 export KIOSK_TEST_ADMIN_PW=…   # frei gewähltes Passwort für den Test-Verwalter
 tests/run.sh                   # alles
-tests/run.sh kollege           # nur ein Teil: sperren | kollege | verwalter | grenzen
+tests/run.sh kollege           # nur ein Teil: sperren | kollege | verwalter | kasse | grenzen
+KIOSK_APP_REF=origin/next tests/run.sh            # App aus einem anderen Git-Stand testen (Tests bleiben die aus dem Arbeitsordner)
+KIOSK_APP_REF=origin/main tests/run.sh uebergang  # bisherige App gegen die schon umgestellte Datenbank
 ```
 
 `run.sh` macht vier Dinge:
@@ -22,7 +24,8 @@ tests/run.sh kollege           # nur ein Teil: sperren | kollege | verwalter | g
 3. liefert die Kopie lokal aus,
 4. startet die Tests mit Playwright.
 
-Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein.
+Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein – in der Fassung, zu der die getestete App gehört
+(die Tests ab Runde 3 setzen „Ausbaustufe 3“ voraus).
 
 ## Teile
 
@@ -31,6 +34,8 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein.
 | `sperren.test.js` | direkte Aufrufe ohne Anmeldung: Tabellen, `a_*`-Funktionen, Fotospeicher sind gesperrt |
 | `kollege.test.js` | QR-Link, Anmeldung, falsche PIN, Sperre nach 3 Versuchen, Einwilligung, Anschreiben, Rückgängig, PIN ändern |
 | `verwalter.test.js` | Anmeldung, Bon, Nachricht an Claude, Regal (inkl. Produkt löschen), Fotos (bis 60), Einkauf von Hand / per Ansage / per Bon-Foto, Haltbarkeit (auch ohne Einkauf), Kasse, Leute, QR-Code, Sicherung, Konto ohne Rechte |
+| `kasse.test.js` | Kassensturz nach Kasseninhalt (mit/ohne Zahlungen, mehrere Tage, Kasse kleiner als Zahlungen), Storno (Handbuchung, Kassensturz, Einkauf) |
+| `uebergang.test.js` | (nur auf Wunsch) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
 | `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
 | `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |
 
