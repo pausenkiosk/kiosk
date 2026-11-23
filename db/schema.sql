@@ -372,3 +372,56 @@ grant execute on function k_names(text), k_login(text, uuid, text), k_logout(tex
 grant execute on function a_claim(text), a_person(text, text), a_pin(uuid, text), a_person_delete(uuid), a_pay(uuid, int),
   a_fix(uuid, int), a_cash(int), a_count(jsonb), a_purchase(date, text, jsonb), a_waste(uuid, int) to authenticated;
 alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
+
+-- ---------- Ausbaustufe 2: Wünsche an Claude, Regalfotos, Personenliste ----------
+create table if not exists requests (
+  id uuid primary key default gen_random_uuid(),
+  at timestamptz not null default now(),
+  text text not null,
+  status text not null default 'neu',   -- neu | erledigt | rueckfrage
+  answer text
+);
+create table if not exists photo_jobs (
+  id uuid primary key default gen_random_uuid(),
+  at timestamptz not null default now(),
+  paths text[] not null,
+  status text not null default 'neu',   -- neu | vorschlag | fertig
+  result jsonb,                         -- [{"id": Produkt, "qty": Stückzahl}]
+  note text
+);
+do $$
+declare t text;
+begin
+  foreach t in array array['requests','photo_jobs'] loop
+    execute format('alter table %I enable row level security', t);
+    execute format('revoke all on %I from anon, authenticated', t);
+    execute format('drop policy if exists adm on %I', t);
+    execute format('create policy adm on %I for all to authenticated using (is_admin()) with check (is_admin())', t);
+    execute format('grant select, insert, update, delete on %I to authenticated', t);
+  end loop;
+end $$;
+
+-- Mehrere Personen auf einmal, jede mit zufälliger Start-PIN. Liefert die PINs genau einmal zurück.
+create or replace function a_persons(p_names text[]) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare n text; pin text; b bytea; res jsonb := '[]'::jsonb;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  foreach n in array p_names loop
+    n := trim(n);
+    continue when length(n) < 2 or exists (select 1 from persons where lower(vorname) = lower(n));
+    b := gen_random_bytes(2);
+    pin := lpad(((get_byte(b, 0) * 256 + get_byte(b, 1)) % 10000)::text, 4, '0');
+    insert into persons(vorname, pin_hash) values (n, crypt(pin, gen_salt('bf', 10)));
+    res := res || jsonb_build_object('vorname', n, 'pin', pin);
+  end loop;
+  return res;
+end $$;
+revoke execute on function a_persons(text[]) from public, anon;
+grant execute on function a_persons(text[]) to authenticated;
+
+-- Privater Fotospeicher, nur für den Verwalter.
+insert into storage.buckets (id, name, public) values ('fotos', 'fotos', false) on conflict do nothing;
+drop policy if exists kiosk_fotos_adm on storage.objects;
+create policy kiosk_fotos_adm on storage.objects for all to authenticated
+  using (bucket_id = 'fotos' and public.is_admin()) with check (bucket_id = 'fotos' and public.is_admin());

@@ -41,11 +41,12 @@ function ask(title, fields, okLabel = 'Speichern', intro = '') {
     const id = 'f_' + f.k;
     if (f.type === 'select') return `<label for="${id}">${esc(f.label)}</label><select id="${id}">` +
       f.options.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(f.value ?? '') ? ' selected' : ''}>${esc(l)}</option>`).join('') + '</select>';
+    if (f.type === 'area') return `<label for="${id}">${esc(f.label)}</label><textarea id="${id}" rows="6">${esc(f.value ?? '')}</textarea>`;
     return `<label for="${id}">${esc(f.label)}</label><input id="${id}" type="${f.type || 'text'}" value="${esc(f.value ?? '')}"` +
       `${f.mode ? ` inputmode="${f.mode}"` : ''}${f.max ? ` maxlength="${f.max}"` : ''}${f.ac ? ` autocomplete="${f.ac}"` : ' autocomplete="off"'}>`;
   }).join('') + `<div class="row"><button type="button" class="btn" data-a="m-x">Abbrechen</button><button class="btn pri">${esc(okLabel)}</button></div></form>`;
   modal.hidden = false;
-  const first = modal.querySelector('input,select'); if (first) first.focus();
+  const first = modal.querySelector('input,select,textarea'); if (first) first.focus();
   return new Promise(res => {
     modalDone = v => { modal.hidden = true; modal.innerHTML = ''; modalDone = null; res(v); };
     $('#mform').addEventListener('submit', e => {
@@ -163,7 +164,7 @@ const kActs = {
 };
 
 /* ---------------- Verwalter ---------------- */
-const A = { tab: 'bon', d: null, counting: false, span: 'month' };
+const A = { tab: 'bon', d: null, counting: false, span: 'month', job: null };
 const TABS = [['bon', 'Bon'], ['regal', 'Regal'], ['einkauf', 'Einkauf'], ['kasse', 'Kasse'], ['leute', 'Leute']];
 
 async function aBoot(session) {
@@ -205,10 +206,12 @@ async function aLoad() {
     SB.from('alerts').select('id,at,text').eq('seen', false).order('at', { ascending: false }),
     SB.from('cash_counts').select('day,cents').order('day', { ascending: false }).limit(2),
     SB.from('wishes').select('id,text,wish_votes(count)').eq('done', false),
-    SB.from('settings').select('key,value')
+    SB.from('settings').select('key,value'),
+    SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
+    SB.from('photo_jobs').select('id,at,paths,status,result,note').neq('status', 'fertig').order('at', { ascending: false })
   ]).then(a => a.map(ok));
   const set = Object.fromEntries(r[9].map(x => [x.key, x.value]));
-  A.d = { products: r[0], sales: r[1], journal: r[2], ledger: r[3], persons: r[4], mhd: r[5], alerts: r[6], cash: r[7], wishes: r[8], set,
+  A.d = { products: r[0], sales: r[1], journal: r[2], ledger: r[3], persons: r[4], mhd: r[5], alerts: r[6], cash: r[7], wishes: r[8], set, requests: r[10], jobs: r[11],
     rot: Number(set.rot || 1), gelb: Number(set.gelb || 2) };
   const now = Date.now(), d28 = now - 28 * 864e5;
   A.d.products.forEach(p => {
@@ -260,19 +263,23 @@ function vBon() {
     <hr>${ln('Im grünen Bereich', act.filter(p => p.lamp === 'g').length + ' Artikel')}
     ${act.length ? '' : '<p class="small mut">Noch kein Produkt ist aktiv. Trage unter Regal Preise ein und schalte Produkte frei.</p>'}
     </div>
-    <div class="paper"><div class="row"><button class="btn pri" data-a="a-go" data-t="regal">Zählen</button><button class="btn" data-a="a-go" data-t="einkauf">Einkauf</button><button class="btn" data-a="a-go" data-t="leute">Zahlung</button></div></div>`;
+    <div class="paper"><div class="row"><button class="btn pri" data-a="a-go" data-t="regal">Zählen</button><button class="btn" data-a="a-go" data-t="einkauf">Einkauf</button><button class="btn" data-a="a-go" data-t="leute">Zahlung</button></div></div>
+    <div class="paper"><h2>An Claude</h2><p class="small mut">Verbesserung, Fehler oder Auftrag eintippen oder über das Mikrofon der Tastatur diktieren. Claude liest das beim nächsten Durchlauf.</p>
+      ${d.requests.map(q => `<div class="it"><i class="lamp ${q.status === 'neu' ? 'y' : q.status === 'erledigt' ? 'g' : 'r'}"></i><span>${esc(q.text)}${q.answer ? `<br><span class="mut">Claude: ${esc(q.answer)}</span>` : ''}</span><span></span><span class="mut">${dshort(q.at.slice(0, 10))}</span></div>`).join('')}
+      <div class="row"><button class="btn pri" data-a="a-req">Nachricht an Claude</button></div></div>`;
 }
 
 function vRegal() {
-  const d = A.d;
+  const d = A.d, prop = A.job && A.job.result ? Object.fromEntries(A.job.result.map(x => [x.id, x.qty])) : {};
   const rows = d.products.filter(p => A.counting ? p.active : true).map(p => A.counting
-    ? `<div class="it"><i class="lamp ${p.lamp}"></i><span>${esc(p.name)}</span><span class="mut">soll ${p.stock}</span><span><input class="cnt" type="number" inputmode="numeric" min="0" data-cnt="${p.id}" value="${p.stock}" aria-label="Gezählt ${esc(p.name)}"></span></div>`
+    ? `<div class="it"><i class="lamp ${p.lamp}"></i><span>${esc(p.name)}</span><span class="mut">soll ${p.stock}${p.id in prop ? ' · Foto ' + prop[p.id] : ''}</span><span><input class="cnt" type="number" inputmode="numeric" min="0" data-cnt="${p.id}" value="${p.id in prop ? prop[p.id] : p.stock}" aria-label="Gezählt ${esc(p.name)}"></span></div>`
     : `<button class="it" data-a="a-prod" data-id="${p.id}"><i class="lamp ${p.active ? p.lamp : 'o'}"></i><span>${esc(p.name)}${p.active ? '' : ' <span class="mut">(aus)</span>'}${p.sale_cents != null ? ' <b class="neg">%</b>' : ''}</span><span>${p.stock} St · ${p.reachTxt}</span><span>${eur(p.price_cents)}</span></button>`).join('');
   return `<div class="paper"><h2>${A.counting ? 'Bestand zählen' : 'Regal'}</h2>
-    <p class="small mut">${A.counting ? 'Trage ein, was wirklich im Regal steht. Die Differenz zum Soll zählt als Barverkauf oder Schwund.' : 'Antippen zum Bearbeiten. Reichweite = Bestand ÷ Wochenverkauf der letzten 4 Wochen.'}</p>
+    <p class="small mut">${A.counting ? 'Trage ein, was wirklich im Regal steht. Die Differenz zum Soll zählt als Barverkauf oder Schwund.' + (A.job ? ' Die Felder sind mit dem Vorschlag aus dem Foto gefüllt' + (A.job.note ? ': ' + esc(A.job.note) : '.') : '') : 'Antippen zum Bearbeiten. Reichweite = Bestand ÷ Wochenverkauf der letzten 4 Wochen.'}</p>
     ${rows}
     <div class="row">${A.counting ? '<button class="btn" data-a="a-cnt-x">Abbrechen</button><button class="btn pri" data-a="a-cnt-ok">Zählung speichern</button>'
-      : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button>'}</div></div>
+      : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-foto">Regalfoto</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button>'}</div>
+    ${A.counting ? '' : '<input type="file" id="foto" accept="image/*" multiple hidden>' + d.jobs.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>Foto vom ${dshort(j.at.slice(0, 10))}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-job" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-jobdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
     ${A.counting ? '' : `<div class="paper"><h2>Wunschliste</h2>${d.wishes.length ? d.wishes.map(w => ({ ...w, n: (w.wish_votes[0] || {}).count || 0 })).sort((a, b) => b.n - a.n).map(w =>
       `<div class="it"><i></i><span>${esc(w.text)}</span><span>${w.n} Stimmen</span><span><button class="btn sm" data-a="a-wish" data-id="${w.id}">Erledigt</button></span></div>`).join('') : '<p class="mut">Keine Wünsche.</p>'}</div>
     <div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
@@ -348,7 +355,7 @@ function vLeute() {
     `<div class="it"><i class="lamp ${p.locked_until && new Date(p.locked_until) > new Date() ? 'r' : p.consent_at ? 'g' : 'o'}"></i><span>${esc(p.vorname)}</span><span class="${p.saldo > 0 ? '' : 'mut'}">${eur(p.saldo)}</span>
      <span><button class="btn sm" data-a="a-pay" data-id="${p.id}">Zahlung</button> <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
     <p class="small mut">Grün: hat zugestimmt · leer: noch nicht angemeldet · rot: gerade gesperrt</p>
-    <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button></div></div>
+    <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button><button class="btn" data-a="a-persons">Mehrere als Liste</button></div></div>
     <div class="paper"><h2>Rangliste Umsatz</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
     <div class="paper"><h2>QR-Code für den Kiosk</h2><p class="small mut">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste.</p><div class="qr">${qr}</div>
       <p class="small brk">${esc(url)}</p><div class="row"><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
@@ -356,7 +363,26 @@ function vLeute() {
 
 const reload = async () => { await aLoad(); aRender(); };
 const aActs = {
-  'a-tab': el => { A.tab = el.dataset.t; A.counting = false; aRender(); },
+  'a-tab': el => { A.tab = el.dataset.t; A.counting = false; A.job = null; aRender(); },
+  'a-req': async () => {
+    const v = await ask('Nachricht an Claude', [{ k: 't', label: 'Was soll besser werden oder erledigt werden?', type: 'area' }], 'Abschicken');
+    if (!v || !v.t.trim()) return;
+    ok(await SB.from('requests').insert({ text: v.t.trim().slice(0, 2000) })); toast('Gespeichert. Claude liest es beim nächsten Durchlauf.'); await reload();
+  },
+  'a-foto': () => { $('#foto').click(); },
+  'a-job': el => { A.job = A.d.jobs.find(j => j.id === el.dataset.id); A.counting = true; aRender(); },
+  'a-jobdel': async el => { const j = A.d.jobs.find(x => x.id === el.dataset.id); await SB.storage.from('fotos').remove(j.paths); ok(await SB.from('photo_jobs').delete().eq('id', j.id)); await reload(); },
+  'a-persons': async () => {
+    const v = await ask('Mehrere Personen eintragen', [{ k: 't', label: 'Vornamen, getrennt durch Komma, „und“ oder neue Zeile. Diktieren geht über das Mikrofon der Tastatur.', type: 'area' }], 'Anlegen');
+    if (!v) return;
+    const names = [...new Set(v.t.split(/[,;.\n]+|\s+und\s+|\s+/i).map(x => x.trim()).filter(x => x.length > 1).map(x => x[0].toUpperCase() + x.slice(1)))];
+    if (!names.length) return;
+    const made = await rpc('a_persons', { p_names: names });
+    await reload();
+    if (!made.length) return toast('Niemand angelegt: Alle Namen gibt es schon.');
+    modal.innerHTML = `<div class="paper"><h2>${made.length} angelegt</h2><p class="small">Die Start-PINs stehen nur jetzt hier. Notiere sie und gib sie persönlich weiter. Jeder kann seine PIN danach selbst ändern.</p>${made.map(m => ln(esc(m.vorname), esc(m.pin), 'big')).join('')}<div class="row"><button class="btn pri" data-a="m-close">Notiert, schließen</button></div></div>`;
+    modal.hidden = false;
+  },
   'a-go': el => { A.tab = el.dataset.t; A.counting = el.dataset.t === 'regal'; aRender(); },
   'a-span': el => { A.span = el.dataset.s; aRender(); },
   'a-out': async () => { await SB.auth.signOut(); location.hash = '#verwaltung'; location.reload(); },
@@ -370,10 +396,12 @@ const aActs = {
   },
   'a-seen': async el => { ok(await SB.from('alerts').update({ seen: true }).eq('id', el.dataset.id)); await reload(); },
   'a-cnt': () => { A.counting = true; aRender(); },
-  'a-cnt-x': () => { A.counting = false; aRender(); },
+  'a-cnt-x': () => { A.counting = false; A.job = null; aRender(); },
   'a-cnt-ok': async () => {
     const items = [...document.querySelectorAll('[data-cnt]')].map(i => ({ id: i.dataset.cnt, qty: Math.max(0, parseInt(i.value, 10) || 0) }));
-    await rpc('a_count', { p_items: items }); A.counting = false; toast('Zählung gespeichert.'); await reload();
+    await rpc('a_count', { p_items: items });
+    if (A.job) { await SB.storage.from('fotos').remove(A.job.paths); ok(await SB.from('photo_jobs').update({ status: 'fertig', paths: [] }).eq('id', A.job.id)); A.job = null; }
+    A.counting = false; toast('Zählung gespeichert.'); await reload();
   },
   'a-prod': async el => {
     const p = A.d.products.find(x => x.id === el.dataset.id) || { name: '', category: 'Sonstiges', price_cents: 0, sale_cents: null, active: true };
@@ -471,11 +499,33 @@ document.addEventListener('click', async e => {
   const el = e.target.closest('[data-a]'); if (!el) return;
   const a = el.dataset.a;
   if (a === 'm-x') return modalDone && modalDone(null);
+  if (a === 'm-close') { modal.hidden = true; modal.innerHTML = ''; return; }
   if (a === 'go-admin') { location.hash = '#verwaltung'; return aLoginScreen(); }
   const fn = kActs[a] || aActs[a]; if (!fn || busy) return;
   busy = true;
   try { await fn(el); } catch (err) { console.error(err); toast('Das hat nicht geklappt: ' + (err.message || 'Fehler')); }
   busy = false;
+});
+async function shrink(file) {
+  const bmp = await createImageBitmap(file), k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
+}
+document.addEventListener('change', async e => {
+  if (e.target.id !== 'foto' || !e.target.files.length) return;
+  try {
+    toast('Fotos werden hochgeladen …');
+    const paths = [];
+    for (const f of [...e.target.files].slice(0, 8)) {
+      const path = `regal/${crypto.randomUUID()}.jpg`;
+      ok(await SB.storage.from('fotos').upload(path, await shrink(f), { contentType: 'image/jpeg' }));
+      paths.push(path);
+    }
+    ok(await SB.from('photo_jobs').insert({ paths }));
+    toast(`${paths.length} Foto${paths.length === 1 ? '' : 's'} gespeichert. Der Vorschlag erscheint hier nach der Auswertung.`);
+    await reload();
+  } catch (err) { console.error(err); toast('Hochladen hat nicht geklappt: ' + (err.message || 'Fehler')); }
 });
 (async function boot() {
   try {

@@ -71,3 +71,4 @@ th{color:var(--mut);border-bottom:1px dashed var(--dash)}
 .qr svg{max-width:100%;height:auto}
 .brk{word-break:break-all}
 @media (prefers-reduced-motion:no-preference){#modal .paper{animation:up .16s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.4}}}
+textarea{min-height:120px;resize:vertical}
