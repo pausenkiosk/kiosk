@@ -112,6 +112,9 @@ module.exports = async function kollege(browser) {
     await lnIs(page, 'OFFEN', '0,80 €');
     await rowHas(page, 'Wasser', /19 St/);
   });
+  await step_('Kiosk-Code bleibt in der Adresse (für das Symbol auf dem Home-Bildschirm)', async () => {
+    eq(new URL(page.url()).searchParams.get('k'), CFG.code, 'Kiosk-Code in der Adresse nach Anmeldung und Buchung');
+  });
   await step_('Sitzung bleibt nach neuem Laden der Seite bestehen', async () => {
     await page.reload();
     await see(page, 'Schuldschein von Ben');

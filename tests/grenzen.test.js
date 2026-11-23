@@ -8,7 +8,7 @@ const toCents = s => Math.round(Number(s.replace(/\./g, '').replace(',', '.').re
 
 module.exports = async function grenzen(browser) {
   setGroup('Viele Buchungen');
-  const page = await newPage(browser);
+  const page = await newPage(browser, { acceptDownloads: true });
   const S = (n, f) => step(n, f, page);
   const N = 1200;
   let before = null;
@@ -50,6 +50,16 @@ module.exports = async function grenzen(browser) {
     await page.locator('#nav [data-t="leute"]').click();
     const txt = (await prow(page, 'Gerd').locator('span').nth(1).innerText()).trim();
     eq(toCents(txt), before.gerd + N, 'Schuldschein Gerd in Cent');
+  });
+  await S('Sicherung enthält alle Buchungen (auch über 1000), keine doppelt', async () => {
+    await page.locator('#nav [data-t="bon"]').click();
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90000 }), page.locator('#app [data-a="a-backup"]').click()]);
+    const data = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+    for (const t of ['journal', 'ledger']) {
+      const n = await page.evaluate(async t => (await SB.from(t).select('id', { count: 'exact', head: true })).count, t);
+      eq(data[t].length, n, 'Zeilen in der Sicherung: ' + t);
+      eq(new Set(data[t].map(r => r.id)).size, n, 'verschiedene Zeilen in der Sicherung: ' + t);
+    }
   });
   await page.context().close();
 };

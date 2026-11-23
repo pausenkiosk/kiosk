@@ -1,5 +1,6 @@
 'use strict';
-/* Verwalter-Bereich komplett: Anmeldung, Bon, Regal, Regalfoto, Einkauf, Haltbarkeit, Kasse, Leute, Nachricht an Claude.
+/* Verwalter-Bereich komplett: Anmeldung, Bon, Regal (inkl. Löschen), Fotos, Einkauf (von Hand, Ansage, Bon-Foto),
+   Haltbarkeit, Kasse, Leute, Sicherung, Nachricht an Claude.
    Läuft nach dem Kollegen-Teil: Ben hat 1 Wasser angeschrieben (0,80 €), Clara ist gesperrt. */
 const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, row, prow, rowHas, lnIs, anonApi, isoDay } = require('./lib');
 
@@ -7,7 +8,7 @@ const dshort = iso => { const [, m, d] = iso.split('-'); return `${d}.${m}.`; };
 
 module.exports = async function verwalter(browser) {
   setGroup('Verwalter');
-  const page = await newPage(browser, { permissions: ['clipboard-read', 'clipboard-write'] });
+  const page = await newPage(browser, { permissions: ['clipboard-read', 'clipboard-write'], acceptDownloads: true });
   const S = (n, f) => step(n, f, page);
   const tab = async t => { await idle(page); await page.locator(`#nav [data-t="${t}"]`).click(); await page.locator(`#nav [data-t="${t}"].on`).waitFor(); };
   const act = async a => { await idle(page); await page.locator(`#app [data-a="${a}"]`).first().click(); };
@@ -62,6 +63,7 @@ module.exports = async function verwalter(browser) {
     await lnIs(page, 'Einnahmen Monat', '50,00');
     await lnIs(page, 'Offene Schuldscheine', '10,30');   // Emil 4,50 + Anna 2,00 + Gerd 3,00 + Ben 0,80
     await lnIs(page, 'Fehlbetrag letzte Zählung', '–');
+    await see(page, 'Du hast noch keine Sicherung heruntergeladen. Bitte jetzt sichern.');
   });
   await S('Bon: Datum und Kalenderwoche in der Kopfzeile', async () => {
     const sub = await page.locator('#app .sub').first().innerText();
@@ -84,7 +86,7 @@ module.exports = async function verwalter(browser) {
     await act('a-cnt-x');
     await tab('bon');
     await page.locator('#app [data-a="a-go"][data-t="einkauf"]').click();
-    await see(page, 'Einkauf erfassen');
+    await see(page, 'Einkauf von Hand');
     await tab('bon');
     await page.locator('#app [data-a="a-go"][data-t="leute"]').click();
     await see(page, 'Schuldscheine');
@@ -159,7 +161,32 @@ module.exports = async function verwalter(browser) {
     await hideToast(page);
     await page.locator('#app [data-a="a-prod"][data-id=""]').click();
     await fillModal(page, 'Neues Produkt', { name: 'Cola', cat: 'Getränke', price: '1,00' });
-    await toast(page, /Das hat nicht geklappt/);
+    await toast(page, /^Diesen Namen gibt es schon\.$/);
+  });
+  await S('Regal: neues Produkt bietet kein „Endgültig löschen“ an', async () => {
+    await page.locator('#app [data-a="a-prod"][data-id=""]').click();
+    eq((await page.locator('#modal #f_active option').allInnerTexts()).join('|'), 'Ja|Nein', 'Auswahl „Im Kiosk sichtbar“');
+    await fillModal(page, 'Neues Produkt', { name: 'Wegdamit', cat: 'Test', price: '1' });
+    await rowHas(page, 'Wegdamit', /1,00/);
+  });
+  await S('Regal: Produkt löschen – Sicherheitsabfrage, Abbrechen behält das Produkt', async () => {
+    await page.locator('#app button.it', { hasText: 'Wegdamit' }).click();
+    eq((await page.locator('#modal #f_active option').allInnerTexts()).join('|'), 'Ja|Nein|Endgültig löschen …', 'Auswahl „Im Kiosk sichtbar“');
+    await fillModal(page, 'Produkt bearbeiten', { active: 'del' });
+    await page.locator('#modal h2', { hasText: 'Wegdamit endgültig löschen?' }).waitFor();
+    await see(page, 'Das lässt sich nicht rückgängig machen', '#modal');
+    await page.locator('#modal [data-a="m-x"]').click();
+    await idle(page);
+    expect(await product('Wegdamit'), 'Produkt wurde trotz Abbrechen gelöscht');
+  });
+  await S('Regal: Produkt endgültig löschen', async () => {
+    await hideToast(page);
+    await page.locator('#app button.it', { hasText: 'Wegdamit' }).click();
+    await fillModal(page, 'Produkt bearbeiten', { active: 'del' });
+    await fillModal(page, 'Wegdamit endgültig löschen?', {});
+    await toast(page, /^Wegdamit gelöscht\.$/);
+    await page.waitForFunction(() => ![...document.querySelectorAll('#app .it')].some(e => e.textContent.includes('Wegdamit')));
+    expect(!(await product('Wegdamit')), 'Produkt steht noch in der Datenbank');
   });
   await S('Regal: Zählen – Abbrechen speichert nichts', async () => {
     await act('a-cnt');
@@ -202,27 +229,32 @@ module.exports = async function verwalter(browser) {
     await hideToast(page);
     await page.locator('#foto').setInputFiles(files.map((n, i) => ({ name: n, mimeType: 'image/png', buffer: png })));
   };
-  const stored = () => page.evaluate(async () => (await SB.storage.from('fotos').list('regal')).data.map(f => f.name).filter(n => n.endsWith('.jpg')));
-  await S('Regalfoto: Speicher ist zu Beginn leer (Reste früherer Läufe werden entfernt)', async () => {
+  const stored = () => page.evaluate(async () => {
+    const out = [];
+    for (const dir of ['foto', 'einkauf', 'regal']) for (const f of (await SB.storage.from('fotos').list(dir, { limit: 1000 })).data) if (f.name.endsWith('.jpg')) out.push(dir + '/' + f.name);
+    return out;
+  });
+  await S('Fotos: Speicher ist zu Beginn leer (Reste früherer Läufe werden entfernt)', async () => {
     const old = await stored();
-    if (old.length) await page.evaluate(async names => { await SB.storage.from('fotos').remove(names.map(n => 'regal/' + n)); }, old);
+    if (old.length) await page.evaluate(async names => { await SB.storage.from('fotos').remove(names); }, old);
     eq((await stored()).length, 0, 'Fotos im Speicher');
   });
-  await S('Regalfoto: Knopf öffnet die Dateiauswahl', async () => {
+  await S('Fotos: Knopf öffnet die Dateiauswahl', async () => {
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), act('a-foto')]);
     expect(chooser.isMultiple(), 'Dateiauswahl erlaubt nur ein Foto');
     await chooser.setFiles([]);
   });
-  await S('Regalfoto: Hochladen legt einen Auftrag an', async () => {
+  await S('Fotos: Hochladen legt einen Auftrag an', async () => {
     await upload(['regal1.png', 'regal2.png']);
     await toast(page, /2 Fotos gespeichert\. Der Vorschlag erscheint hier nach der Auswertung\./, 45000);
     await rowHas(page, 'Foto vom ' + dshort(isoDay()), /wartet auf Auswertung/);
     const j = await db('photo_jobs', 'paths,status');
     eq(j.length, 1, 'Anzahl Foto-Aufträge'); eq(j[0].status, 'neu', 'Status'); eq(j[0].paths.length, 2, 'Anzahl Fotos');
     const files = await stored();
-    expect(files.length === 2 && j[0].paths.every(p => files.includes(p.replace('regal/', ''))), 'Fotos liegen nicht im Speicher: ' + files.join(','));
+    expect(files.length === 2 && j[0].paths.every(p => files.includes(p) && p.startsWith('foto/')), 'Fotos liegen nicht im Speicher: ' + files.join(','));
+    eq((await db('photo_jobs', 'kind'))[0].kind, 'foto', 'Art des Auftrags');
   });
-  await S('Regalfoto: Vorschlag prüfen füllt die Zählung vor und schließt den Auftrag ab', async () => {
+  await S('Fotos: Vorschlag prüfen füllt die Zählung vor und schließt den Auftrag ab', async () => {
     // Die Auswertung macht sonst Claude. Hier wird ihr Ergebnis nachgestellt: Wasser 18 Stück.
     await page.evaluate(async () => {
       const w = (await SB.from('products').select('id').eq('name', 'Wasser')).data[0];
@@ -246,13 +278,43 @@ module.exports = async function verwalter(browser) {
     eq(j[0].status, 'fertig', 'Status des Auftrags'); eq(j[0].paths.length, 0, 'Fotos nach Abschluss');
     eq((await stored()).length, 0, 'Fotos im Speicher nach Abschluss');
   });
-  await S('Regalfoto: wartenden Auftrag löschen', async () => {
+  await S('Fotos: wartenden Auftrag löschen', async () => {
     await upload(['regal3.png']);
     await toast(page, /1 Foto gespeichert\./, 45000);
     await rowHas(page, 'Foto vom', /wartet auf Auswertung/);
     await row(page, 'Foto vom').locator('[data-a="a-jobdel"]').click();
     await page.waitForFunction(() => !document.querySelector('#app').textContent.includes('Foto vom'));
     eq((await db('photo_jobs', 'id', 'status', 'neu')).length, 0, 'offene Foto-Aufträge');
+    eq((await stored()).length, 0, 'Fotos im Speicher nach dem Löschen');
+  });
+
+  await S('Fotos: mehr als 60 auf einmal – nur die ersten 60 werden hochgeladen', async () => {
+    const tiny = await page.screenshot({ clip: { x: 0, y: 0, width: 40, height: 40 } });
+    await hideToast(page);
+    await page.evaluate(() => {
+      window.__seen = [];
+      const t = document.querySelector('#toast');
+      const tick = () => { if (!t.hidden && window.__seen[window.__seen.length - 1] !== t.textContent) window.__seen.push(t.textContent); window.__raf = requestAnimationFrame(tick); };
+      tick();
+    });
+    await page.locator('#foto').setInputFiles(Array.from({ length: 61 }, (_, i) => ({ name: `f${i}.png`, mimeType: 'image/png', buffer: tiny })));
+    await toast(page, /^60 Fotos gespeichert\./, 180000);
+    await rowHas(page, 'Foto vom', /wartet auf Auswertung/);
+    const j = await db('photo_jobs', 'paths', 'status', 'neu');
+    eq(j.length, 1, 'offene Foto-Aufträge'); eq(j[0].paths.length, 60, 'Fotos im Auftrag');
+    eq((await stored()).length, 60, 'Fotos im Speicher');
+  });
+  await S('Fotos: beim Hochladen ist der Fortschritt zu sehen', async () => {
+    const seen = await page.evaluate(() => { cancelAnimationFrame(window.__raf); return window.__seen; });
+    expect(seen.some(t => /^Foto \d+ von 60 wird hochgeladen …$/.test(t)), 'Kein Fortschritt gesehen: ' + seen.slice(0, 5).join(' | '));
+  });
+  await S('Fotos: Hinweis „Es werden die ersten 60 Fotos hochgeladen.“ ist zu sehen', async () => {
+    const seen = await page.evaluate(() => window.__seen);
+    expect(seen.includes('Es werden die ersten 60 Fotos hochgeladen.'), 'Der Hinweis war in keinem Bild sichtbar. Gesehen: ' + seen.slice(0, 3).join(' | ') + ' …');
+  });
+  await S('Fotos: Auftrag mit 60 Fotos löschen räumt den Speicher', async () => {
+    await row(page, 'Foto vom').locator('[data-a="a-jobdel"]').click();
+    await page.waitForFunction(() => !document.querySelector('#app').textContent.includes('Foto vom'), null, { timeout: 60000 });
     eq((await stored()).length, 0, 'Fotos im Speicher nach dem Löschen');
   });
 
@@ -267,6 +329,8 @@ module.exports = async function verwalter(browser) {
   };
   await S('Einkauf: Formular mit heutigem Datum und zwei Zeilen, „Zeile dazu“', async () => {
     await tab('einkauf');
+    await see(page, 'Einkauf per Foto oder Ansage');
+    await see(page, 'Einkauf von Hand');
     eq(await page.inputValue('#eday'), isoDay(), 'Datum');
     eq(await page.locator('#cart .cart').count(), 2, 'Zeilen');
     await act('a-cart');
@@ -288,12 +352,15 @@ module.exports = async function verwalter(browser) {
     await page.fill('#estore', 'Testmarkt');
     await fillCart(0, 'Schokoriegel', '10', '7,90', isoDay(5));
     await fillCart(1, 'Wasser', '6', '2,94', isoDay(60));
-    await fillCart(2, 'Testkeks', '4', '2', '');
+    await fillCart(2, 'Testkeks', '4', '2', isoDay(20));
     await act('a-buy');
     await toast(page, /Einkauf gespeichert\./);
     await rowHas(page, 'Schokoriegel · 10 St', new RegExp(dshort(isoDay(5)).replace(/\./g, '\\.') + ' \\((4|5) T\\)'));
     await rowHas(page, 'Wasser · 6 St', new RegExp(dshort(isoDay(60)).replace(/\./g, '\\.') + ' \\((59|60) T\\)'));
-    expect(await page.locator('#app .it', { hasText: 'Testkeks ·' }).count() === 0, 'Zeile ohne Haltbarkeitsdatum steht in der Haltbarkeitsliste');
+    await rowHas(page, 'Testkeks · 4 St', /\((19|20) T\)/);
+    expect(await row(page, 'Schokoriegel · 10 St').locator('i.lamp.r').count() === 1, 'Unter 14 Tagen ist die Ampel nicht rot');
+    expect(await row(page, 'Testkeks · 4 St').locator('i.lamp.y').count() === 1, '14 bis 30 Tage: Ampel ist nicht gelb');
+    expect(await row(page, 'Wasser · 6 St').locator('i.lamp.g').count() === 1, 'Über 30 Tage: Ampel ist nicht grün');
     const sch = await product('Schokoriegel'), wa = await product('Wasser'), tk = await product('Testkeks');
     eq(sch.stock, 18, 'Bestand Schokoriegel'); eq(sch.cost_cents, 79, 'Einkaufspreis Schokoriegel');
     eq(wa.stock, 24, 'Bestand Wasser'); eq(wa.cost_cents, 49, 'Einkaufspreis Wasser');
@@ -307,10 +374,15 @@ module.exports = async function verwalter(browser) {
     eq(await page.locator('#cart .cart').count(), 2, 'Zeilen');
     eq(await page.inputValue('#estore'), '', 'Laden');
   });
-  await S('Bon: bald ablaufende Ware steht unter „Läuft ab“', async () => {
+  await S('Bon: Haltbarkeitswarnung in zwei Stufen (unter 14 Tagen rot, 14 bis 30 Tage gelb)', async () => {
     await tab('bon');
-    await see(page, 'Läuft ab (1)');
-    await rowHas(page, 'Schokoriegel', new RegExp('10 St.*' + dshort(isoDay(5)).replace(/\./g, '\\.')));
+    await see(page, 'Läuft in 14 Tagen ab (1)');
+    await rowHas(page, 'Schokoriegel', new RegExp('10 St.*' + dshort(isoDay(5)).replace(/\./g, '\\.') + ' · (4|5) T'));
+    await see(page, 'Läuft in 30 Tagen ab (1)');
+    await rowHas(page, 'Testkeks', new RegExp('4 St.*' + dshort(isoDay(20)).replace(/\./g, '\\.') + ' · (19|20) T'));
+    expect(await row(page, dshort(isoDay(5)) + ' ·').locator('i.lamp.r').count() === 1, 'Stufe unter 14 Tagen ist nicht rot');
+    expect(await row(page, dshort(isoDay(20)) + ' ·').locator('i.lamp.y').count() === 1, 'Stufe 14 bis 30 Tage ist nicht gelb');
+    expect(!(await page.locator('#app').innerText()).includes(dshort(isoDay(60)) + ' ·'), 'Ware mit 60 Tagen Rest steht auf dem Bon');
     await lnIs(page, 'KASSENSTAND', '20,66');   // 33,50 − 12,84
     await tab('regal');
     await page.locator('#app button.it', { hasText: 'Schokoriegel' }).click();
@@ -358,12 +430,121 @@ module.exports = async function verwalter(browser) {
     const s = (await db('sales', 'qty,cents,kind', 'product_id', sch.id)).filter(x => x.kind === 'verlust');
     eq(JSON.stringify(s), JSON.stringify([{ qty: 3, cents: 237, kind: 'verlust' }]), 'Verlustbuchung');
   });
+  await S('Regal: Produkt mit Einkauf und Haltbarkeitsdatum löschen nimmt dessen Daten mit, Kasse bleibt', async () => {
+    const tk = await product('Testkeks');
+    await tab('regal');
+    await hideToast(page);
+    await page.locator('#app button.it', { hasText: 'Testkeks' }).click();
+    await fillModal(page, 'Produkt bearbeiten', { active: 'del' });
+    await fillModal(page, 'Testkeks endgültig löschen?', {});
+    await toast(page, /^Testkeks gelöscht\.$/);
+    await idle(page);
+    eq((await db('purchase_items', 'id', 'product_id', tk.id)).length, 0, 'Haltbarkeitsdaten des gelöschten Produkts');
+    await tab('einkauf');
+    expect(await page.locator('#app .it', { hasText: 'Testkeks' }).count() === 0, 'Gelöschtes Produkt steht noch in der Haltbarkeitsliste');
+    await tab('bon');
+    await lnIs(page, 'KASSENSTAND', '20,66');
+    expect(!(await page.locator('#app').innerText()).includes('Läuft in 30 Tagen ab'), 'Warnung zum gelöschten Produkt steht noch auf dem Bon');
+    await tab('einkauf');
+  });
   await S('Haltbarkeit: „Verkauft, Hinweis erledigt“ entfernt den Hinweis ohne Bestandsänderung', async () => {
     await mhd('Wasser', { a: 'done', x: '' });
     await see(page, 'Keine offenen Haltbarkeitsdaten.');
     eq((await product('Wasser')).stock, 24, 'Bestand Wasser');
     await tab('bon');
-    expect(!(await page.locator('#app').innerText()).includes('Läuft ab'), '„Läuft ab“ steht noch auf dem Bon');
+    expect(!(await page.locator('#app').innerText()).includes('Läuft in'), 'Haltbarkeitswarnung steht noch auf dem Bon');
+  });
+  await S('Haltbarkeit ohne Einkauf: Datum ohne Stückzahl wird gewarnt und lässt sich erledigen', async () => {
+    // Solche Einträge legt sonst Claude aus Produktfotos an (kein Einkauf, Stückzahl 0).
+    await page.evaluate(async day => {
+      const g = (await SB.from('products').select('id').eq('name', 'Gummibärchen')).data[0];
+      const { error } = await SB.from('purchase_items').insert({ purchase_id: null, product_id: g.id, qty: 0, cents: 0, mhd: day });
+      if (error) throw new Error(error.message);
+    }, isoDay(10));
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+    await see(page, 'Läuft in 14 Tagen ab (1)');
+    const d10 = dshort(isoDay(10));
+    const txt = (await row(page, d10 + ' ·').innerText()).replace(/\s+/g, ' ').trim();
+    expect(new RegExp('^Gummibärchen ' + d10.replace(/\./g, '\\.') + ' · (9|10) T$').test(txt), 'Bon-Zeile ohne Stückzahl erwartet, tatsächlich: ' + txt);
+    await tab('einkauf');
+    const t2 = (await row(page, d10).innerText()).replace(/\s+/g, ' ').trim();
+    expect(/^Gummibärchen \d\d\.\d\d\. \((9|10) T\)/.test(t2), 'Haltbarkeitszeile ohne „0 St“ erwartet, tatsächlich: ' + t2);
+    await idle(page); await hideToast(page);
+    await row(page, d10).locator('[data-a="a-mhd"]').click();
+    await fillModal(page, 'Gummibärchen', { a: 'done', x: '' });
+    await see(page, 'Keine offenen Haltbarkeitsdaten.');
+    eq((await product('Gummibärchen')).stock, 0, 'Bestand Gummibärchen');
+  });
+
+  /* ---------- Einkauf per Bon/Screenshot oder Ansage ---------- */
+  await S('Einkauf ansagen: leere Ansage wird nicht gespeichert', async () => {
+    await tab('einkauf');
+    await act('a-say');
+    await fillModal(page, 'Einkauf ansagen', { t: '  ' });
+    await idle(page);
+    eq((await db('photo_jobs', 'id', 'kind', 'einkauf')).length, 0, 'Einkaufs-Aufträge');
+  });
+  await S('Einkauf ansagen: Ansage wird gespeichert und wartet auf Auswertung', async () => {
+    await hideToast(page);
+    await act('a-say');
+    await fillModal(page, 'Einkauf ansagen', { t: 'Heute im Testbon-Markt 12 Cola für 9,48 und 6 Wasser für 3 Euro, Cola haltbar 40 Tage.' });
+    await toast(page, /Gespeichert\. Der Vorschlag erscheint hier nach der Auswertung\./);
+    await rowHas(page, 'Ansage', new RegExp(dshort(isoDay()).replace(/\./g, '\\.') + ' Ansage: wartet auf Auswertung'));
+    const j = await db('photo_jobs', 'kind,status,text,paths', 'kind', 'einkauf');
+    eq(j.length, 1, 'Einkaufs-Aufträge'); eq(j[0].status, 'neu', 'Status'); eq(j[0].paths.length, 0, 'Fotos'); expect(j[0].text.startsWith('Heute im Testbon-Markt'), 'Text der Ansage: ' + j[0].text);
+    await tab('regal');
+    expect(await page.locator('#app .it', { hasText: 'Foto vom' }).count() === 0, 'Einkaufs-Auftrag steht auch unter Regal');
+    await tab('einkauf');
+  });
+  await S('Einkauf per Vorschlag: „Prüfen“ füllt das Formular (Laden, Datum, Zeilen, Haltbarkeit)', async () => {
+    // Die Auswertung macht sonst Claude. Hier wird ihr Ergebnis nachgestellt.
+    await page.evaluate(async ([day, mhd]) => {
+      const id = async n => (await SB.from('products').select('id').eq('name', n)).data[0].id;
+      const result = { store: 'Testbon-Markt', day, items: [{ id: await id('Cola'), qty: 12, cents: 948, mhd }, { id: await id('Wasser'), qty: 6, cents: 300 }] };
+      const { error } = await SB.from('photo_jobs').update({ status: 'vorschlag', result, note: 'Preis Wasser geschätzt' }).eq('kind', 'einkauf');
+      if (error) throw new Error(error.message);
+    }, [isoDay(), isoDay(40)]);
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+    await tab('einkauf');
+    await rowHas(page, 'Ansage', /Vorschlag liegt vor/);
+    await act('a-draft');
+    await see(page, 'Vorschlag prüfen');
+    await see(page, 'Hinweis von Claude: Preis Wasser geschätzt');
+    eq(await page.inputValue('#estore'), 'Testbon-Markt', 'Laden');
+    eq(await page.inputValue('#eday'), isoDay(), 'Datum');
+    eq(await page.locator('#cart .cart').count(), 2, 'Zeilen');
+    const vals = await page.locator('#cart .cart').evaluateAll(rs => rs.map(r => [r.querySelector('select').selectedOptions[0].textContent, ...[...r.querySelectorAll('input')].map(i => i.value)].join('|')));
+    eq(vals.join(' ; '), `Cola|12|9,48|${isoDay(40)} ; Wasser|6|3,00|`, 'vorbelegte Zeilen');
+  });
+  await S('Einkauf per Vorschlag: Speichern bucht den Einkauf und schließt den Auftrag ab', async () => {
+    await hideToast(page);
+    await act('a-buy');
+    await toast(page, /Einkauf gespeichert\./);
+    await see(page, 'Einkauf von Hand');
+    expect(await page.locator('#app .it', { hasText: 'Ansage' }).count() === 0, 'Erledigter Vorschlag steht noch in der Liste');
+    eq((await product('Cola')).stock, 22, 'Bestand Cola'); eq((await product('Wasser')).stock, 30, 'Bestand Wasser');
+    eq(JSON.stringify(await db('journal', 'day,out_cents', 'text', 'Einkauf Testbon-Markt')), JSON.stringify([{ day: isoDay(), out_cents: 1248 }]), 'Kassenbuch-Eintrag');
+    eq((await db('photo_jobs', 'status', 'kind', 'einkauf'))[0].status, 'fertig', 'Status des Auftrags');
+    await rowHas(page, 'Cola · 12 St', /\((39|40) T\)/);
+    eq(await page.inputValue('#estore'), '', 'Laden nach dem Speichern');
+  });
+  await S('Einkauf per Bon-Foto: Hochladen legt einen Einkaufs-Auftrag an, Löschen räumt auf', async () => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), act('a-bon')]);
+    expect(chooser.isMultiple(), 'Dateiauswahl erlaubt nur ein Foto');
+    await chooser.setFiles([]);
+    await hideToast(page);
+    await page.locator('#bonfoto').setInputFiles([{ name: 'bon.png', mimeType: 'image/png', buffer: png }]);
+    await toast(page, /1 Foto gespeichert\./, 45000);
+    await rowHas(page, '1 Foto', /1 Foto: wartet auf Auswertung/);
+    const j = await db('photo_jobs', 'kind,paths', 'status', 'neu');
+    eq(j.length, 1, 'offene Aufträge'); eq(j[0].kind, 'einkauf', 'Art'); expect(j[0].paths[0].startsWith('einkauf/'), 'Ablageort: ' + j[0].paths[0]);
+    eq((await stored()).join(','), j[0].paths[0], 'Fotos im Speicher');
+    await row(page, '1 Foto').locator('[data-a="a-draftdel"]').click();
+    await page.waitForFunction(() => !document.querySelector('#app').textContent.includes('wartet auf Auswertung'));
+    eq((await stored()).length, 0, 'Fotos im Speicher nach dem Löschen');
+    eq((await db('photo_jobs', 'id', 'status', 'neu')).length, 0, 'offene Aufträge nach dem Löschen');
   });
 
   /* ---------- Kasse ---------- */
@@ -383,7 +564,7 @@ module.exports = async function verwalter(browser) {
     const labels = await firstCol();
     expect(labels.length === 3 && labels.every(l => /^KW\d{1,2} \d\d$/.test(l)), 'Wochenzeilen: ' + labels.join(' | '));
     const top = (await page.locator('#app table').first().locator('tr').nth(1).locator('td').allInnerTexts()).join(' ');
-    expect(/50,00 12,84 37,16/.test(top), 'Aktuelle Woche: erwartet Ein 50,00 Aus 12,84 Saldo 37,16, tatsächlich ' + top);
+    expect(/50,00 25,32 24,68/.test(top), 'Aktuelle Woche: erwartet Ein 50,00 Aus 25,32 Saldo 24,68, tatsächlich ' + top);
   });
   await S('Kasse: Grafik Jahr', async () => {
     await page.locator('.seg [data-s="year"]').click();
@@ -421,7 +602,7 @@ module.exports = async function verwalter(browser) {
   await S('Bon: Fehlbetrag vergleicht Zählung und Kassensturz', async () => {
     await tab('bon');
     await lnIs(page, 'Fehlbetrag letzte Zählung', '1,00');   // 2 Cola à 1,60 + 1 Wasser à 0,80 fehlen, 3,00 in der Kasse
-    await lnIs(page, 'KASSENSTAND', '23,66');
+    await lnIs(page, 'KASSENSTAND', '11,18');
   });
   await S('Kasse: Buchung von Hand (Einnahme)', async () => {
     await tab('kasse');
@@ -443,9 +624,32 @@ module.exports = async function verwalter(browser) {
     await idle(page);
     eq((await db('journal', 'id', 'source', 'hand')).length, 4, 'Anzahl Hand-Buchungen');   // 2 aus den Testdaten + 2 neue
   });
+  await S('Bereichswechsel geht auch, während noch gespeichert wird; andere Knöpfe melden „Einen Moment“', async () => {
+    await act('a-jour');
+    await fillModal(page, 'Buchung von Hand', { t: 'Testwechsel', i: '0,01' }, false);
+    const r = await page.evaluate(async () => {
+      document.querySelector('#modal button.pri').click();
+      await new Promise(f => setTimeout(f, 0));
+      const wasBusy = busy;
+      document.querySelector('#app [data-a="a-cash"]').click();
+      const t = document.querySelector('#toast'), hint = t.hidden ? '' : t.textContent, modalOpen = !document.querySelector('#modal').hidden;
+      document.querySelector('#nav [data-t="leute"]').click();
+      return { wasBusy, hint, modalOpen, tab: document.querySelector('#nav .on').dataset.t, text: document.querySelector('#app h2').textContent };
+    });
+    expect(r.wasBusy, 'Speichern war schon fertig, Prüfung nicht aussagekräftig');
+    eq(r.hint, 'Einen Moment, die letzte Eingabe wird noch gespeichert …', 'Hinweis beim Tippen während des Speicherns');
+    expect(!r.modalOpen, 'Zweiter Dialog ging während des Speicherns auf');
+    eq(r.tab + '/' + r.text, 'leute/Schuldscheine', 'Bereich direkt nach dem Wechsel');
+    await idle(page);
+    eq(await page.locator('#nav .on').getAttribute('data-t'), 'leute', 'Bereich nach Ende des Speicherns');
+    eq((await db('journal', 'in_cents', 'text', 'Testwechsel')).length, 1, 'Buchung trotz Wechsel gespeichert');
+    await page.evaluate(async () => { await SB.from('journal').delete().eq('text', 'Testwechsel'); });
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+  });
   await S('Kasse: Kassenstand folgt den Buchungen, negativ wird rot', async () => {
     await tab('bon');
-    await lnIs(page, 'KASSENSTAND', '-1.198,56');   // 23,66 + 12,34 − 1.234,56
+    await lnIs(page, 'KASSENSTAND', '-1.211,04');   // 11,18 + 12,34 − 1.234,56
     expect(await page.locator('#app .ln.neg', { hasText: 'KASSENSTAND' }).count() === 1, 'Negativer Kassenstand ist nicht rot markiert');
   });
 
@@ -486,7 +690,7 @@ module.exports = async function verwalter(browser) {
     await hideToast(page);
     await act('a-person');
     await fillModal(page, 'Person eintragen', { n: 'Dora', p: '1234' });
-    await toast(page, /Das hat nicht geklappt/);
+    await toast(page, /^Diesen Namen gibt es schon\.$/);
   });
   let pins = {};
   await S('Leute: mehrere als Liste – Start-PINs werden einmal angezeigt', async () => {
@@ -565,6 +769,13 @@ module.exports = async function verwalter(browser) {
     await rowHas(page, 'Anna', /1,50/);
     eq(await saldo('Anna'), 150, 'Schuldschein Anna');
   });
+  await S('Leute: Korrektur versteht das typografische Minus aus dem Hinweistext (−)', async () => {
+    await more('Anna', 'fix', '−0,50');
+    await rowHas(page, 'Anna', /1,00/);
+    eq(await saldo('Anna'), 100, 'Schuldschein Anna');
+    await more('Anna', 'fix', '0,50');
+    await rowHas(page, 'Anna', /1,50/);
+  });
   await S('Leute: Korrektur ohne Betrag wird abgelehnt', async () => {
     await more('Anna', 'fix', '');
     await toast(page, /Bitte einen Betrag eintragen/);
@@ -619,6 +830,35 @@ module.exports = async function verwalter(browser) {
   await S('Leute: Verwalter sieht keine PIN-Prüfwerte', async () => {
     const r = await page.evaluate(async () => { const { data, error } = await SB.from('persons').select('pin_hash').limit(1); return { data, error: error && error.message }; });
     expect(r.error && !r.data, 'PIN-Prüfwert lesbar: ' + JSON.stringify(r));
+  });
+  /* ---------- Sicherung ---------- */
+  await S('Sicherung herunterladen: Datei enthält die Daten, aber keine PINs und keinen Kiosk-Code', async () => {
+    await tab('bon');
+    await hideToast(page);
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), act('a-backup')]);
+    eq(dl.suggestedFilename(), `kiosk-sicherung-${isoDay()}.json`, 'Dateiname');
+    const txt = require('fs').readFileSync(await dl.path(), 'utf8');
+    const data = JSON.parse(txt);
+    const want = ['products', 'sales', 'ledger', 'journal', 'purchases', 'purchase_items', 'counts', 'cash_counts', 'alerts', 'requests', 'persons', 'settings', 'erstellt'];
+    expect(want.every(k => k in data), 'In der Sicherung fehlt: ' + want.filter(k => !(k in data)).join(', '));
+    for (const t of ['products', 'ledger', 'journal', 'purchases', 'purchase_items', 'counts', 'cash_counts', 'requests', 'persons']) {
+      eq(data[t].length, (await db(t, 'id')).length, 'Zeilen in der Sicherung: ' + t);
+    }
+    expect(data.persons.every(p => !('pin_hash' in p) && p.vorname), 'Personen enthalten PIN-Prüfwerte oder keinen Vornamen');
+    expect(!/pin_hash|kiosk_code|setup_code/.test(txt) && !txt.includes(CFG.code), 'Sicherung enthält PIN-Prüfwert oder Kiosk-Code');
+    expect(!/token_hash|encrypted_password/.test(txt), 'Sicherung enthält Sitzungs- oder Anmeldedaten');
+    await toast(page, /Sicherung erstellt\./);
+  });
+  await S('Sicherung: Bon zeigt das Datum der letzten Sicherung', async () => {
+    await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay())} (vor 0 Tagen).`);
+    expect(!(await page.locator('#app').innerText()).includes('Bitte jetzt sichern'), 'Mahnung trotz frischer Sicherung');
+  });
+  await S('Sicherung: älter als 14 Tage wird angemahnt', async () => {
+    await page.evaluate(async day => { await SB.from('settings').upsert({ key: 'backup_at', value: day }); }, isoDay(-20));
+    await page.reload();
+    await page.locator('#nav:not([hidden])').waitFor();
+    await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay(-20))} (vor 20 Tagen). Bitte jetzt sichern.`);
+    expect(await page.locator('#app p.neg', { hasText: 'Bitte jetzt sichern' }).count() === 1, 'Mahnung ist nicht rot hervorgehoben');
   });
   await S('Keine Fehler in der Browser-Konsole (Verwalter)', async () => {
     // Erwartet sind nur die bewusst ausgelösten Fehler (falsches Passwort, doppelte Namen, gesperrte Spalte).

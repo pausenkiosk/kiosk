@@ -30,8 +30,9 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein.
 |---|---|
 | `sperren.test.js` | direkte Aufrufe ohne Anmeldung: Tabellen, `a_*`-Funktionen, Fotospeicher sind gesperrt |
 | `kollege.test.js` | QR-Link, Anmeldung, falsche PIN, Sperre nach 3 Versuchen, Einwilligung, Anschreiben, Rückgängig, PIN ändern |
-| `verwalter.test.js` | Anmeldung, Bon, Nachricht an Claude, Regal, Regalfoto, Einkauf, Haltbarkeit, Kasse, Leute, QR-Code, Konto ohne Rechte |
-| `grenzen.test.js` | Summen bei mehr als 1000 Buchungen |
+| `verwalter.test.js` | Anmeldung, Bon, Nachricht an Claude, Regal (inkl. Produkt löschen), Fotos (bis 60), Einkauf von Hand / per Ansage / per Bon-Foto, Haltbarkeit (auch ohne Einkauf), Kasse, Leute, QR-Code, Sicherung, Konto ohne Rechte |
+| `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
+| `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |
 
 Die Reihenfolge ist fest: Der Verwalter-Teil baut auf dem Kollegen-Teil auf.
 Ergebnis und Bildschirmfotos fehlgeschlagener Schritte liegen danach in `tests/output/` (nicht im Repository).
