@@ -275,7 +275,7 @@ function vBon() {
       ${d.requests.map(q => `<div class="it"><i class="lamp ${q.status === 'erledigt' ? 'g' : q.status === 'rueckfrage' ? 'r' : 'y'}"></i><span>${esc(q.text)}${q.answer ? `<br><span class="mut">Claude: ${esc(q.answer)}</span>` : ''}</span><span></span><span class="mut">${dshort(q.at.slice(0, 10))}</span></div>`).join('')}
       <div class="row"><button class="btn pri" data-a="a-req">Nachricht an Claude</button></div></div>
     <div class="paper"><h2>Sicherung</h2>${(() => { const b = d.set.backup_at, age = b ? Math.floor((t - pd(b)) / 864e5) : null;
-      return `<p class="small ${age === null || age > 14 ? 'neg' : 'mut'}">${age === null ? 'Du hast noch keine Sicherung heruntergeladen.' : `Letzte heruntergeladene Sicherung: ${dshort(b)} (vor ${age} Tagen).`}${age === null || age > 14 ? ' Bitte jetzt sichern.' : ''}</p>`; })()}
+      return `<p class="small ${age === null || age > 14 ? 'neg' : 'mut'}">${age === null ? 'Du hast noch keine Sicherung heruntergeladen.' : `Letzte heruntergeladene Sicherung: ${dshort(b)} (${age === 0 ? 'heute' : age === 1 ? 'gestern' : 'vor ' + age + ' Tagen'}).`}${age === null || age > 14 ? ' Bitte jetzt sichern.' : ''}</p>`; })()}
       <p class="small mut">Speichert alle Kiosk-Daten als Datei auf dein Gerät, ohne PINs und ohne Kiosk-Code. Die Datei enthält Vornamen und Schuldenstände, also nicht weitergeben.</p>
       <div class="row"><button class="btn" data-a="a-backup">Sicherung herunterladen</button></div></div>`;
 }
@@ -463,7 +463,7 @@ const aActs = {
     const items = [];
     for (const row of document.querySelectorAll('#cart .cart')) {
       const [sel, q, e, m] = row.querySelectorAll('select,input');
-      if (!sel.value) continue;
+      if (!sel.value) { if (q.value || e.value) return toast('In einer Zeile mit Stückzahl oder Preis fehlt das Produkt. Bitte auswählen oder die Zeile leeren.'); continue; }
       const qty = parseInt(q.value, 10), c = cents(e.value);
       if (!(qty > 0) || c === null) return toast('Bitte Stückzahl und Gesamtpreis für jede Zeile eintragen.');
       items.push({ id: sel.value, qty, cents: c, mhd: m.value || '' });
@@ -479,7 +479,7 @@ const aActs = {
     if (!v) return;
     if (v.a === 'sale') { const c = cents(v.x); if (!(c > 0)) return toast('Bitte einen Abverkaufspreis eintragen.'); ok(await SB.from('products').update({ sale_cents: c }).eq('id', el.dataset.p)); }
     else {
-      if (v.a === 'waste') await rpc('a_waste', { p_product: el.dataset.p, p_qty: parseInt(v.x, 10) || Number(el.dataset.q) });
+      if (v.a === 'waste') { const n = parseInt(v.x, 10) || Number(el.dataset.q); if (!(n > 0)) return toast('Bitte die entsorgte Stückzahl eintragen.'); await rpc('a_waste', { p_product: el.dataset.p, p_qty: n }); }
       ok(await SB.from('purchase_items').update({ mhd_done: true }).eq('id', el.dataset.id));
       ok(await SB.from('products').update({ sale_cents: null }).eq('id', el.dataset.p));
     }
@@ -524,7 +524,7 @@ const aActs = {
     const all = async (table, cols = '*') => {
       const out = [];
       for (let from = 0; ; from += 1000) {
-        const rows = ok(await SB.from(table).select(cols).range(from, from + 999));
+        const rows = ok(await SB.from(table).select(cols).order(table === 'settings' ? 'key' : 'id').range(from, from + 999));
         out.push(...rows); if (rows.length < 1000) return out;
       }
     };
@@ -581,7 +581,6 @@ document.addEventListener('change', async e => {
     toast('Fotos werden hochgeladen …');
     const paths = [];
     const files = [...e.target.files].slice(0, 60);
-    if (e.target.files.length > 60) toast('Es werden die ersten 60 Fotos hochgeladen.');
     for (const f of files) {
       toast(`Foto ${paths.length + 1} von ${files.length} wird hochgeladen …`);
       const path = `${kind}/${crypto.randomUUID()}.jpg`;
@@ -589,7 +588,8 @@ document.addEventListener('change', async e => {
       paths.push(path);
     }
     ok(await SB.from('photo_jobs').insert({ paths, kind }));
-    toast(`${paths.length} Foto${paths.length === 1 ? '' : 's'} gespeichert. Der Vorschlag erscheint hier nach der Auswertung.`);
+    const total = e.target.files.length;
+    toast(total > paths.length ? `${paths.length} von ${total} Fotos gespeichert, mehr als 60 auf einmal gehen nicht. Den Rest bitte danach hochladen.` : `${paths.length} Foto${paths.length === 1 ? '' : 's'} gespeichert. Der Vorschlag erscheint hier nach der Auswertung.`);
     await reload();
   } catch (err) { console.error(err); toast('Hochladen hat nicht geklappt: ' + (err.message || 'Fehler')); }
 });
