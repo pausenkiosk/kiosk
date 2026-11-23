@@ -173,7 +173,7 @@ async function aBoot(session) {
     });
     return;
   }
-  await aLoad(); aRender();
+  await aLoad(); aRender(); sweepPhotos();
 }
 
 function aLoginScreen() {
@@ -203,12 +203,12 @@ async function aLoad() {
   const r = await Promise.all([
     SB.from('products').select('*').order('category').order('name'),
     pages(() => SB.from('sales').select('product_id,qty,cents,kind,at').gte('at', since).order('at').order('id')),
-    pages(() => SB.from('journal').select('day,text,in_cents,out_cents').order('day', { ascending: false }).order('id')),
+    pages(() => SB.from('journal').select('id,day,text,in_cents,out_cents,kind,ref,source').order('day', { ascending: false }).order('id')),
     pages(() => SB.from('ledger').select('person_id,amount_cents,kind,day').order('id')),
     SB.from('persons').select('id,vorname,consent_at,locked_until,active').order('vorname'),
     SB.from('purchase_items').select('id,qty,mhd,product_id').eq('mhd_done', false).not('mhd', 'is', null).order('mhd'),
     SB.from('alerts').select('id,at,text').eq('seen', false).order('at', { ascending: false }),
-    SB.from('cash_counts').select('day,cents').order('day', { ascending: false }).limit(2),
+    SB.from('cash_counts').select('day,cents,bar_cents').order('at', { ascending: false }).limit(2),
     Promise.resolve({ data: [] }),
     SB.from('settings').select('key,value'),
     SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
@@ -226,6 +226,16 @@ async function aLoad() {
     p.lamp = p.stock <= 0 ? 'r' : p.reach < A.d.rot ? 'r' : p.reach < A.d.gelb ? 'y' : 'g';
     p.reachTxt = p.stock <= 0 ? 'leer' : p.reach === Infinity ? 'kein Verkauf' : p.reach < 1 ? `${Math.max(1, Math.round(p.reach * 7))} Tage` : `${p.reach.toFixed(1).replace('.', ',')} Wo.`;
   });
+}
+async function sweepPhotos() {
+  try {
+    const used = new Set((ok(await SB.from('photo_jobs').select('paths'))).flatMap(j => j.paths || [])), old = Date.now() - 36e5, gone = [];
+    for (const dir of ['foto', 'einkauf', 'regal']) {
+      const { data } = await SB.storage.from('fotos').list(dir, { limit: 1000 });
+      (data || []).forEach(f => { const path = dir + '/' + f.name; if (f.created_at && new Date(f.created_at) < old && !used.has(path)) gone.push(path); });
+    }
+    if (gone.length) await SB.storage.from('fotos').remove(gone);
+  } catch (e) { console.warn(e); }
 }
 const pname = id => (A.d.products.find(p => p.id === id) || {}).name || '?';
 
@@ -245,7 +255,7 @@ function vBon() {
   if (d.cash.length) {
     const to = pd(d.cash[0].day).getTime() + 864e5, from = d.cash[1] ? pd(d.cash[1].day).getTime() + 864e5 : 0;
     const ware = d.sales.filter(s => s.kind === 'zaehlung' && new Date(s.at) < to && new Date(s.at) >= from).reduce((a, s) => a + s.cents, 0);
-    fehl = eur(ware - d.cash[0].cents);
+    fehl = eur(ware - (d.cash[0].bar_cents ?? d.cash[0].cents));
   }
   const act = d.products.filter(p => p.active);
   const list = (ps, f) => ps.map(p => `<div class="it"><i class="lamp ${p.lamp}"></i><span>${esc(p.name)}</span><span>${p.stock} St</span><span>${f(p)}</span></div>`).join('');
@@ -262,6 +272,8 @@ function vBon() {
     ${ln('Offene Schuldscheine', eur(offen))}
     ${ln('Fehlbetrag letzte Zählung', fehl)}
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
+    ${(() => { const a = d.set.kiosk_code_at ? Math.floor((t - pd(d.set.kiosk_code_at)) / 864e5) : 0;
+      return a >= 30 ? `<hr><h2>QR-Code erneuern</h2><p class="small">Der QR-Code am Kiosk ist ${a} Tage alt. Unter Leute einen neuen erzeugen und den Aushang neu drucken.</p><div class="row"><button class="btn sm" data-a="a-tab" data-t="leute">Zu Leute</button></div>` : ''; })()}
     <hr><h2>Nachbestellen (${red.length})</h2>${list(red, p => p.reachTxt) || '<p class="mut">Nichts.</p>'}
     ${yel.length ? `<hr><h2>Wird knapp (${yel.length})</h2>${list(yel, p => p.reachTxt)}` : ''}
     ${urgent.length ? `<hr><h2 class="neg">Läuft in 14 Tagen ab (${urgent.length})</h2>` + urgent.map(m => mrow(m, 'r')).join('') : ''}
@@ -289,9 +301,11 @@ function vRegal() {
     <p class="small mut">${A.counting ? 'Trage ein, was wirklich im Regal steht. Die Differenz zum Soll zählt als Barverkauf oder Schwund.' + (A.job ? ' Die Felder sind mit dem Vorschlag aus dem Foto gefüllt' + (A.job.note ? ': ' + esc(A.job.note) : '.') : '') : 'Antippen zum Bearbeiten. Reichweite = Bestand ÷ Wochenverkauf der letzten 4 Wochen.'}</p>
     ${rows}
     <div class="row">${A.counting ? '<button class="btn" data-a="a-cnt-x">Abbrechen</button><button class="btn pri" data-a="a-cnt-ok">Zählung speichern</button>'
-      : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-foto">Fotos</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button>'}</div>
+      : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-foto">Fotos</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button><button class="btn" data-a="a-print">Preisliste drucken</button>'}</div>
     ${A.counting ? '' : '<input type="file" id="foto" accept="image/*" multiple hidden>' + d.jobs.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>Foto vom ${dshort(j.at.slice(0, 10))}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-job" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-jobdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
-    ${A.counting ? '' : `<div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
+    ${A.counting ? '' : `<div class="paper sheet printonly">${head('Preisliste · Stand ' + new Date().toLocaleDateString('de-DE'))}${(() => { const g = {}; d.products.filter(p => p.active).forEach(p => { (g[p.category] = g[p.category] || []).push(p); });
+      return Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(p => ln(esc(p.name), (p.sale_cents != null ? `<s>${eur(p.price_cents)}</s> ` : '') + eur(p.sale_cents ?? p.price_cents) + ' €')).join('')).join(''); })()}<hr><p class="small">Anschreiben per QR-Code oder bar in die Kasse.</p></div>
+    <div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
       <div class="row"><button class="btn" data-a="a-amp">Schwellen ändern</button></div></div>`}`;
 }
 
@@ -354,7 +368,7 @@ function vKasse() {
     <table><tr><th>Zeitraum</th><th>Ein</th><th>Aus</th><th>Saldo</th></tr>${bs.slice().reverse().map(b => `<tr><td>${esc(A.span === 'year' ? b.label : b.label + ' ' + b.key.slice(2, 4))}</td><td>${eur(b.i)}</td><td>${eur(b.o)}</td><td class="${b.i - b.o < 0 ? 'neg' : ''}">${eur(b.i - b.o)}</td></tr>`).join('')}</table>
     <div class="row"><button class="btn pri" data-a="a-cash">Kassensturz</button><button class="btn" data-a="a-jour">Buchung von Hand</button></div></div>
     <div class="paper"><h2>Verkauf letzte 4 Wochen</h2>${sales.length ? sales.map(x => ln(esc(x.n), x.u + ' St')).join('') : '<p class="mut">Noch keine Verkaufsdaten. Sie entstehen durch QR-Buchungen und Zählungen.</p>'}</div>
-    <div class="paper"><h2>Letzte Buchungen</h2>${d.journal.slice(0, 25).map(j => `<div class="it"><i></i><span>${dshort(j.day)} ${esc(j.text)}</span><span></span><span class="${j.out_cents ? 'neg' : ''}">${j.out_cents ? '−' + eur(j.out_cents) : eur(j.in_cents)}</span></div>`).join('')}</div>`;
+    <div class="paper"><h2>Letzte Buchungen</h2>${d.journal.slice(0, 25).map(j => `<div class="it"><i></i><span>${dshort(j.day)} ${esc(j.text)}</span><span>${(j.kind || j.source) === 'hand' || ((j.kind === 'bar' || j.kind === 'einkauf') && j.ref) ? `<button class="btn sm" data-a="a-storno" data-id="${j.id}">Storno</button>` : ''}</span><span class="${j.out_cents ? 'neg' : ''}">${j.out_cents ? '−' + eur(j.out_cents) : eur(j.in_cents)}</span></div>`).join('')}</div>`;
 }
 
 function vLeute() {
@@ -372,11 +386,11 @@ function vLeute() {
     <p class="small mut">Grün: hat zugestimmt · leer: noch nicht angemeldet · rot: gerade gesperrt</p>
     <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button><button class="btn" data-a="a-persons">Mehrere als Liste</button></div></div>
     <div class="paper"><h2>Rangliste Umsatz</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
-    <div class="paper poster"><h2 class="noprint">QR-Code für den Kiosk</h2><p class="small mut noprint">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste. Zum Speichern lange auf den Code drücken und „In Fotos sichern“ wählen.</p>
+    <div class="paper poster sheet"><h2 class="noprint">QR-Code für den Kiosk</h2><p class="small mut noprint">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste. Zum Speichern lange auf den Code drücken und „In Fotos sichern“ wählen.</p>
       <div class="printonly"><p class="ctr"><span class="logo">KIOSK</span></p><p class="ctr">Anschreiben mit dem Handy</p></div>
       <div class="qr">${qr}</div>
       <div class="printonly"><p>1. Code mit der Kamera scannen</p><p>2. Vornamen antippen, PIN eingeben</p><p>3. Produkt antippen und anschreiben</p><p>Bar bezahlen geht weiterhin. Mitmachen ist freiwillig.</p></div>
-      <p class="small brk noprint">${esc(url)}</p><div class="row noprint"><button class="btn pri" data-a="a-print">Aushang drucken</button><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
+      <p class="small brk noprint">${esc(url)}</p><div class="row noprint"><button class="btn pri" data-a="a-print">Aushang drucken</button><button class="btn" data-a="a-newcode">Neuen QR-Code erzeugen</button><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
 }
 
 const reload = async () => { await aLoad(); aRender(); };
@@ -486,15 +500,26 @@ const aActs = {
     await reload();
   },
   'a-cash': async () => {
-    const v = await ask('Kassensturz', [{ k: 'c', label: 'Bargeld, das seit der letzten Zählung in die Kasse kam (€)', mode: 'decimal' }], 'Buchen',
-      '<p class="small mut">Am besten direkt nach dem Zählen des Regals. Die App vergleicht den Betrag mit der Ware, die laut Zählung ohne Buchung fehlt.</p>');
-    const c = v && cents(v.c); if (c === null || c === false || c < 0) return;
-    await rpc('a_cash', { p_cents: c }); toast('Kassensturz gebucht.'); await reload();
+    const v = await ask('Kassensturz', [{ k: 'c', label: 'Wie viel Geld war in der Kasse? (€)', mode: 'decimal' }], 'Buchen',
+      '<p class="small mut">Kasse leeren, alles zählen und den Betrag eintragen. Schuldschein-Zahlungen, die du seit dem letzten Kassensturz gebucht hast, zieht die App ab; der Rest zählt als Barverkauf.</p>');
+    const c = v ? cents(v.c) : null; if (c === null || c < 0) return;
+    const r = await rpc('a_cash', { p_cents: c }) || { paid: 0, bar: c };
+    toast(r.bar < 0 ? `Achtung: In der Kasse waren ${eur(c)} €, du hast aber ${eur(r.paid)} € Schuldschein-Zahlungen gebucht. Es fehlen ${eur(-r.bar)} €.`
+      : `Gebucht: ${eur(r.bar)} € Barverkäufe` + (r.paid ? `, ${eur(r.paid)} € waren Schuldschein-Zahlungen.` : '.'));
+    await reload();
+  },
+  'a-storno': async el => {
+    const j = A.d.journal.find(x => x.id === el.dataset.id);
+    const sure = await ask('Buchung stornieren?', [], 'Stornieren', `<p>${dshort(j.day)} ${esc(j.text)}: ${j.out_cents ? '−' + eur(j.out_cents) : eur(j.in_cents)} €</p><p class="small mut">${j.kind === 'einkauf' ? 'Der Einkauf wird entfernt und der Bestand um die gekauften Stücke verringert.' : j.kind === 'bar' ? 'Der Kassensturz wird entfernt. Danach kannst du ihn neu buchen.' : 'Die Buchung wird entfernt.'}</p>`);
+    if (!sure) return;
+    const r = await rpc('a_storno', { p_journal: j.id });
+    toast(r === 'ok' ? 'Storniert.' : r === 'nicht_letzter' ? 'Nur der letzte Kassensturz lässt sich stornieren.' : 'Diese Buchung lässt sich nicht stornieren.');
+    await reload();
   },
   'a-jour': async () => {
     const v = await ask('Buchung von Hand', [{ k: 'd', label: 'Datum', type: 'date', value: iso(new Date()) }, { k: 't', label: 'Text' }, { k: 'i', label: 'Einnahme €', mode: 'decimal' }, { k: 'o', label: 'Ausgabe €', mode: 'decimal' }]);
     if (!v || !v.t.trim()) return;
-    ok(await SB.from('journal').insert({ day: v.d, text: v.t.trim(), in_cents: cents(v.i) || 0, out_cents: cents(v.o) || 0, source: 'hand' })); await reload();
+    ok(await SB.from('journal').insert({ day: v.d, text: v.t.trim(), in_cents: cents(v.i) || 0, out_cents: cents(v.o) || 0, source: 'hand', kind: 'hand' })); await reload();
   },
   'a-person': async () => {
     const v = await ask('Person eintragen', [{ k: 'n', label: 'Vorname (nur Vorname)' }, { k: 'p', label: 'Start-PIN (4 Ziffern, persönlich übergeben)', mode: 'numeric', max: 4 }]);
@@ -519,6 +544,13 @@ const aActs = {
     await reload();
   },
   'a-print': () => { window.print(); },
+  'a-newcode': async () => {
+    const sure = await ask('Neuen QR-Code erzeugen?', [], 'Neuen Code erzeugen', '<p>Der bisherige QR-Code und sein Link werden sofort ungültig. Wer schon angemeldet ist, bleibt angemeldet. Für neue Anmeldungen musst du den Aushang neu drucken.</p>');
+    if (!sure) return;
+    const code = [...crypto.getRandomValues(new Uint8Array(8))].map(x => x.toString(16).padStart(2, '0')).join('');
+    ok(await SB.from('settings').upsert([{ key: 'kiosk_code', value: code }, { key: 'kiosk_code_at', value: iso(new Date()) }]));
+    toast('Neuer QR-Code erzeugt. Bitte den Aushang neu drucken.'); await reload();
+  },
   'a-backup': async () => {
     toast('Sicherung wird erstellt …');
     const all = async (table, cols = '*') => {

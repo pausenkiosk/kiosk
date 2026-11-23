@@ -76,9 +76,11 @@ textarea{min-height:120px;resize:vertical}
 .printonly{display:none}
 @media print{
   body{background:#fff;padding:0}
-  #nav,#toast,#modal,.paper:not(.poster),.noprint{display:none!important}
+  #nav,#toast,#modal,.paper:not(.sheet),.noprint{display:none!important}
   .paper::after{display:none}
-  .poster{padding:12mm;font-size:16pt;text-align:center}
+  .sheet{padding:12mm;font-size:14pt}
+  .sheet.printonly{display:block}
+  .poster{font-size:16pt;text-align:center}
   .printonly{display:block}
   .qr img{max-width:110mm}
   .logo{font-size:34pt}
