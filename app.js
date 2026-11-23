@@ -253,7 +253,7 @@ function vBon() {
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
     <hr><h2>Nachbestellen (${red.length})</h2>${list(red, p => p.reachTxt) || '<p class="mut">Nichts.</p>'}
     ${yel.length ? `<hr><h2>Wird knapp (${yel.length})</h2>${list(yel, p => p.reachTxt)}` : ''}
-    ${soon.length ? `<hr><h2>Läuft ab (${soon.length})</h2>` + soon.map(m => `<div class="it"><i class="lamp ${pd(m.mhd) < t ? 'r' : 'y'}"></i><span>${esc(pname(m.product_id))}</span><span>${m.qty} St</span><span>${dshort(m.mhd)}</span></div>`).join('') : ''}
+    ${soon.length ? `<hr><h2>Läuft ab (${soon.length})</h2>` + soon.map(m => `<div class="it"><i class="lamp ${pd(m.mhd) < t ? 'r' : 'y'}"></i><span>${esc(pname(m.product_id))}</span><span>${m.qty ? m.qty + ' St' : ''}</span><span>${dshort(m.mhd)}</span></div>`).join('') : ''}
     ${cheap.length ? `<hr><h2>Unter Einkaufspreis (${cheap.length})</h2>` + cheap.map(p => `<div class="it"><i class="lamp y"></i><span>${esc(p.name)}</span><span>VK ${eur(p.price_cents)}</span><span>EK ${eur(p.cost_cents)}</span></div>`).join('') : ''}
     <hr>${ln('Im grünen Bereich', act.filter(p => p.lamp === 'g').length + ' Artikel')}
     ${act.length ? '' : '<p class="small mut">Noch kein Produkt ist aktiv. Trage unter Regal Preise ein und schalte Produkte frei.</p>'}
@@ -277,7 +277,7 @@ function vRegal() {
     <p class="small mut">${A.counting ? 'Trage ein, was wirklich im Regal steht. Die Differenz zum Soll zählt als Barverkauf oder Schwund.' + (A.job ? ' Die Felder sind mit dem Vorschlag aus dem Foto gefüllt' + (A.job.note ? ': ' + esc(A.job.note) : '.') : '') : 'Antippen zum Bearbeiten. Reichweite = Bestand ÷ Wochenverkauf der letzten 4 Wochen.'}</p>
     ${rows}
     <div class="row">${A.counting ? '<button class="btn" data-a="a-cnt-x">Abbrechen</button><button class="btn pri" data-a="a-cnt-ok">Zählung speichern</button>'
-      : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-foto">Regalfoto</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button>'}</div>
+      : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-foto">Fotos</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button>'}</div>
     ${A.counting ? '' : '<input type="file" id="foto" accept="image/*" multiple hidden>' + d.jobs.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>Foto vom ${dshort(j.at.slice(0, 10))}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-job" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-jobdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
     ${A.counting ? '' : `<div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
       <div class="row"><button class="btn" data-a="a-amp">Schwellen ändern</button></div></div>`}`;
@@ -296,7 +296,7 @@ function vEinkauf() {
     <p class="small mut">Je Zeile: Produkt, Stückzahl, Gesamtpreis, darunter das Haltbarkeitsdatum (optional).</p>
     <div id="cart">${cartRow()}${cartRow()}</div>
     <div class="row"><button class="btn" data-a="a-cart">Zeile dazu</button><button class="btn pri" data-a="a-buy">Einkauf speichern</button></div></div>
-    <div class="paper"><h2>Haltbarkeit</h2>${d.mhd.length ? d.mhd.map(m => { const days = Math.ceil((pd(m.mhd) - t) / 864e5); return `<div class="it"><i class="lamp ${days < 0 ? 'r' : days < 14 ? 'y' : 'g'}"></i><span>${esc(pname(m.product_id))} · ${m.qty} St</span><span>${dshort(m.mhd)} (${days < 0 ? 'abgelaufen' : days + ' T'})</span>
+    <div class="paper"><h2>Haltbarkeit</h2>${d.mhd.length ? d.mhd.map(m => { const days = Math.ceil((pd(m.mhd) - t) / 864e5); return `<div class="it"><i class="lamp ${days < 0 ? 'r' : days < 14 ? 'y' : 'g'}"></i><span>${esc(pname(m.product_id))}${m.qty ? ' · ' + m.qty + ' St' : ''}</span><span>${dshort(m.mhd)} (${days < 0 ? 'abgelaufen' : days + ' T'})</span>
       <span><button class="btn sm" data-a="a-mhd" data-id="${m.id}" data-p="${m.product_id}" data-q="${m.qty}">…</button></span></div>`; }).join('') : '<p class="mut">Keine offenen Haltbarkeitsdaten.</p>'}</div>`;
 }
 
@@ -543,7 +543,10 @@ document.addEventListener('change', async e => {
   try {
     toast('Fotos werden hochgeladen …');
     const paths = [];
-    for (const f of [...e.target.files].slice(0, 8)) {
+    const files = [...e.target.files].slice(0, 60);
+    if (e.target.files.length > 60) toast('Es werden die ersten 60 Fotos hochgeladen.');
+    for (const f of files) {
+      toast(`Foto ${paths.length + 1} von ${files.length} wird hochgeladen …`);
       const path = `regal/${crypto.randomUUID()}.jpg`;
       ok(await SB.storage.from('fotos').upload(path, await shrink(f), { contentType: 'image/jpeg' }));
       paths.push(path);

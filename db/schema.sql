@@ -445,3 +445,6 @@ begin
         'cents', coalesce(sale_cents, price_cents), 'normal', price_cents, 'sale', sale_cents is not null, 'stock', stock)
         order by category, name) from products where active), '[]'::jsonb));
 end $$;
+
+-- ---------- Haltbarkeitsdaten auch ohne Einkauf (z. B. aus Produktfotos) ----------
+alter table purchase_items alter column purchase_id drop not null;
