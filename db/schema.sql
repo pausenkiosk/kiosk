@@ -1,0 +1,374 @@
+-- Kiosk-App: Datenbank. Grundsatz: Tabellen sind per RLS gesperrt.
+-- Kollegen greifen nur über k_*-Funktionen zu (QR-Code + PIN-Sitzung),
+-- der Verwalter über Supabase-Anmeldung und is_admin().
+-- Verkäufe (sales) tragen keinen Personenbezug, der Schuldschein (ledger) kein Produkt.
+
+create extension if not exists pgcrypto with schema extensions;
+
+create table if not exists settings (key text primary key, value text not null);
+create table if not exists admins (uid uuid primary key);
+create table if not exists persons (
+  id uuid primary key default gen_random_uuid(),
+  vorname text not null unique,
+  pin_hash text not null,
+  consent_at timestamptz,
+  fails int not null default 0,
+  locked_until timestamptz,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create table if not exists sessions (
+  token_hash text primary key,
+  person_id uuid not null references persons(id) on delete cascade,
+  expires timestamptz not null
+);
+create table if not exists products (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text not null default 'Sonstiges',
+  price_cents int not null default 0,
+  sale_cents int,
+  cost_cents int,
+  stock int not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+-- kind: app = per QR gebucht, zaehlung = Abgang laut Zählung (bar/Schwund), verlust = entsorgt
+create table if not exists sales (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references products(id) on delete cascade,
+  qty int not null,
+  cents int not null,
+  kind text not null default 'app',
+  at timestamptz not null default date_trunc('hour', now())
+);
+-- amount_cents > 0 erhöht die Schuld, < 0 ist eine Zahlung. sale_id/ts nur 5 Minuten für "Rückgängig".
+create table if not exists ledger (
+  id uuid primary key default gen_random_uuid(),
+  person_id uuid not null references persons(id) on delete cascade,
+  day date not null,
+  amount_cents int not null,
+  kind text not null,
+  sale_id uuid,
+  ts timestamptz
+);
+create table if not exists journal (
+  id uuid primary key default gen_random_uuid(),
+  day date not null,
+  text text not null,
+  in_cents int not null default 0,
+  out_cents int not null default 0,
+  source text not null default 'app'
+);
+create table if not exists purchases (
+  id uuid primary key default gen_random_uuid(),
+  day date not null,
+  store text not null default ''
+);
+create table if not exists purchase_items (
+  id uuid primary key default gen_random_uuid(),
+  purchase_id uuid not null references purchases(id) on delete cascade,
+  product_id uuid not null references products(id) on delete cascade,
+  qty int not null,
+  cents int not null,
+  mhd date,
+  mhd_done boolean not null default false
+);
+create table if not exists counts (
+  id uuid primary key default gen_random_uuid(),
+  day date not null,
+  product_id uuid not null references products(id) on delete cascade,
+  expected int not null,
+  counted int not null
+);
+create table if not exists cash_counts (
+  id uuid primary key default gen_random_uuid(),
+  day date not null,
+  cents int not null
+);
+create table if not exists wishes (
+  id uuid primary key default gen_random_uuid(),
+  text text not null,
+  created_at timestamptz not null default now(),
+  done boolean not null default false
+);
+create table if not exists wish_votes (
+  wish_id uuid references wishes(id) on delete cascade,
+  person_id uuid references persons(id) on delete cascade,
+  primary key (wish_id, person_id)
+);
+create table if not exists alerts (
+  id uuid primary key default gen_random_uuid(),
+  at timestamptz not null default now(),
+  text text not null,
+  seen boolean not null default false
+);
+
+create or replace function today() returns date language sql stable as
+$$ select (now() at time zone 'Europe/Berlin')::date $$;
+
+create or replace function is_admin() returns boolean language sql stable security definer set search_path = public as
+$$ select exists (select 1 from admins where uid = auth.uid()) $$;
+
+-- RLS: alles gesperrt, nur der Verwalter darf direkt an die Tabellen.
+do $$
+declare t text;
+begin
+  foreach t in array array['settings','admins','persons','sessions','products','sales','ledger','journal',
+    'purchases','purchase_items','counts','cash_counts','wishes','wish_votes','alerts'] loop
+    execute format('alter table %I enable row level security', t);
+    execute format('revoke all on %I from anon, authenticated', t);
+    execute format('drop policy if exists adm on %I', t);
+    if t not in ('sessions','admins','persons') then
+      execute format('create policy adm on %I for all to authenticated using (is_admin()) with check (is_admin())', t);
+      execute format('grant select, insert, update, delete on %I to authenticated', t);
+    end if;
+  end loop;
+end $$;
+-- Personen: Verwalter liest nur unkritische Spalten, PIN-Prüfwert nie.
+create policy adm on persons for select to authenticated using (is_admin());
+grant select (id, vorname, consent_at, locked_until, active, created_at) on persons to authenticated;
+
+-- ---------- interne Helfer ----------
+create or replace function k_code_ok(p_code text) returns boolean language sql stable security definer set search_path = public as
+$$ select exists (select 1 from settings where key = 'kiosk_code' and value = p_code) $$;
+
+create or replace function k_person(p_token text) returns uuid language sql stable security definer set search_path = public, extensions as
+$$ select s.person_id from sessions s join persons p on p.id = s.person_id
+   where s.token_hash = encode(digest(p_token, 'sha256'), 'hex') and s.expires > now() and p.active $$;
+
+create or replace function k_cleanup() returns void language sql security definer set search_path = public as
+$$ update ledger set sale_id = null, ts = null where ts < now() - interval '5 minutes';
+   delete from sessions where expires < now(); $$;
+
+-- ---------- Kollegen ----------
+create or replace function k_names(p_code text) returns jsonb language sql stable security definer set search_path = public as
+$$ select case when k_code_ok(p_code)
+     then coalesce((select jsonb_agg(jsonb_build_object('id', id, 'vorname', vorname) order by vorname) from persons where active), '[]'::jsonb)
+     else null end $$;
+
+create or replace function k_login(p_code text, p_person uuid, p_pin text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare p persons; t text;
+begin
+  if not k_code_ok(p_code) then return jsonb_build_object('ok', false, 'err', 'code'); end if;
+  select * into p from persons where id = p_person and active for update;
+  if not found then return jsonb_build_object('ok', false, 'err', 'unbekannt'); end if;
+  if p.locked_until is not null and p.locked_until > now() then
+    return jsonb_build_object('ok', false, 'err', 'gesperrt', 'bis', p.locked_until);
+  end if;
+  if p.pin_hash = crypt(p_pin, p.pin_hash) then
+    update persons set fails = 0, locked_until = null where id = p.id;
+    t := encode(gen_random_bytes(24), 'hex');
+    insert into sessions values (encode(digest(t, 'sha256'), 'hex'), p.id, now() + interval '90 days');
+    return jsonb_build_object('ok', true, 'token', t);
+  end if;
+  if p.fails + 1 >= 3 then
+    update persons set fails = 0, locked_until = now() + interval '1 hour' where id = p.id;
+    insert into alerts(text) values ('Anmeldung von ' || p.vorname || ' nach 3 falschen PINs für 1 Stunde gesperrt');
+    return jsonb_build_object('ok', false, 'err', 'gesperrt', 'bis', now() + interval '1 hour');
+  end if;
+  update persons set fails = fails + 1 where id = p.id;
+  return jsonb_build_object('ok', false, 'err', 'pin', 'rest', 3 - (p.fails + 1));
+end $$;
+
+create or replace function k_logout(p_token text) returns void language sql security definer set search_path = public, extensions as
+$$ delete from sessions where token_hash = encode(digest(p_token, 'sha256'), 'hex') $$;
+
+create or replace function k_consent(p_token text) returns void language sql security definer set search_path = public as
+$$ update persons set consent_at = now() where id = k_person(p_token) and consent_at is null $$;
+
+create or replace function k_state(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token);
+begin
+  if pid is null then return null; end if;
+  perform k_cleanup();
+  return jsonb_build_object(
+    'vorname', (select vorname from persons where id = pid),
+    'consent', (select consent_at is not null from persons where id = pid),
+    'saldo', coalesce((select sum(amount_cents) from ledger where person_id = pid), 0),
+    'entries', coalesce((select jsonb_agg(e) from (
+        select jsonb_build_object('id', id, 'day', day, 'cents', amount_cents, 'kind', kind, 'undo', ts is not null) e
+        from ledger where person_id = pid order by day desc, ts desc nulls last limit 30) x), '[]'::jsonb),
+    'products', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'cat', category,
+        'cents', coalesce(sale_cents, price_cents), 'normal', price_cents, 'sale', sale_cents is not null, 'stock', stock)
+        order by category, name) from products where active), '[]'::jsonb),
+    'wishes', coalesce((select jsonb_agg(jsonb_build_object('id', w.id, 'text', w.text,
+        'votes', (select count(*) from wish_votes v where v.wish_id = w.id),
+        'mine', exists (select 1 from wish_votes v where v.wish_id = w.id and v.person_id = pid)) order by w.created_at desc)
+        from wishes w where not w.done), '[]'::jsonb));
+end $$;
+
+create or replace function k_buy(p_token text, p_product uuid, p_qty int) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token); pr products; sid uuid; c int;
+begin
+  if pid is null then return jsonb_build_object('ok', false, 'err', 'sitzung'); end if;
+  if not exists (select 1 from persons where id = pid and consent_at is not null) then
+    return jsonb_build_object('ok', false, 'err', 'einwilligung'); end if;
+  if p_qty < 1 or p_qty > 10 then return jsonb_build_object('ok', false, 'err', 'menge'); end if;
+  select * into pr from products where id = p_product and active for update;
+  if not found then return jsonb_build_object('ok', false, 'err', 'produkt'); end if;
+  c := coalesce(pr.sale_cents, pr.price_cents) * p_qty;
+  insert into sales(product_id, qty, cents, kind) values (pr.id, p_qty, c, 'app') returning id into sid;
+  insert into ledger(person_id, day, amount_cents, kind, sale_id, ts) values (pid, today(), c, 'kauf', sid, now());
+  update products set stock = greatest(stock - p_qty, 0) where id = pr.id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function k_undo(p_token text, p_entry uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token); l ledger; s sales;
+begin
+  select * into l from ledger where id = p_entry and person_id = pid and kind = 'kauf'
+    and ts > now() - interval '5 minutes' and sale_id is not null;
+  if not found then return jsonb_build_object('ok', false); end if;
+  select * into s from sales where id = l.sale_id;
+  if found then
+    update products set stock = stock + s.qty where id = s.product_id;
+    delete from sales where id = s.id;
+  end if;
+  delete from ledger where id = l.id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function k_pin(p_token text, p_old text, p_new text) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare pid uuid := k_person(p_token);
+begin
+  if pid is null or p_new !~ '^[0-9]{4}$' then return false; end if;
+  update persons set pin_hash = crypt(p_new, gen_salt('bf', 10)) where id = pid and pin_hash = crypt(p_old, pin_hash);
+  return found;
+end $$;
+
+create or replace function k_wish(p_token text, p_text text) returns void
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token); wid uuid;
+begin
+  if pid is null or length(trim(p_text)) < 2 or length(p_text) > 60 then return; end if;
+  if (select count(*) from wishes where not done) >= 40 then return; end if;
+  insert into wishes(text) values (trim(p_text)) returning id into wid;
+  insert into wish_votes values (wid, pid);
+end $$;
+
+create or replace function k_vote(p_token text, p_wish uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token);
+begin
+  if pid is null then return; end if;
+  delete from wish_votes where wish_id = p_wish and person_id = pid;
+  if not found then insert into wish_votes values (p_wish, pid); end if;
+end $$;
+
+-- ---------- Verwalter ----------
+create or replace function a_claim(p_code text) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or exists (select 1 from admins) then return false; end if;
+  if not exists (select 1 from settings where key = 'setup_code' and value = p_code) then return false; end if;
+  insert into admins values (auth.uid());
+  delete from settings where key = 'setup_code';
+  return true;
+end $$;
+
+create or replace function a_person(p_vorname text, p_pin text) returns uuid
+language plpgsql security definer set search_path = public, extensions as $$
+declare r uuid;
+begin
+  if not is_admin() or p_pin !~ '^[0-9]{4}$' then raise exception 'nicht erlaubt'; end if;
+  insert into persons(vorname, pin_hash) values (trim(p_vorname), crypt(p_pin, gen_salt('bf', 10))) returning id into r;
+  return r;
+end $$;
+
+create or replace function a_pin(p_person uuid, p_pin text) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not is_admin() or p_pin !~ '^[0-9]{4}$' then raise exception 'nicht erlaubt'; end if;
+  update persons set pin_hash = crypt(p_pin, gen_salt('bf', 10)), fails = 0, locked_until = null where id = p_person;
+  delete from sessions where person_id = p_person;
+end $$;
+
+create or replace function a_person_delete(p_person uuid) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  if coalesce((select sum(amount_cents) from ledger where person_id = p_person), 0) <> 0 then return false; end if;
+  delete from persons where id = p_person;
+  return true;
+end $$;
+
+create or replace function a_pay(p_person uuid, p_cents int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() or p_cents = 0 then raise exception 'nicht erlaubt'; end if;
+  insert into ledger(person_id, day, amount_cents, kind) values (p_person, today(), -p_cents, 'zahlung');
+  insert into journal(day, text, in_cents) values (today(), 'Zahlung Schuldschein', p_cents);
+end $$;
+
+create or replace function a_fix(p_person uuid, p_cents int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  insert into ledger(person_id, day, amount_cents, kind) values (p_person, today(), p_cents, 'korrektur');
+end $$;
+
+create or replace function a_cash(p_cents int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  insert into cash_counts(day, cents) values (today(), p_cents);
+  if p_cents > 0 then insert into journal(day, text, in_cents) values (today(), 'Barverkäufe', p_cents); end if;
+end $$;
+
+-- p_items: [{"id": uuid, "qty": int}]
+create or replace function a_count(p_items jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare it jsonb; pr products; q int; d int;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  for it in select * from jsonb_array_elements(p_items) loop
+    select * into pr from products where id = (it->>'id')::uuid for update;
+    q := (it->>'qty')::int; d := pr.stock - q;
+    insert into counts(day, product_id, expected, counted) values (today(), pr.id, pr.stock, q);
+    if d > 0 then insert into sales(product_id, qty, cents, kind) values (pr.id, d, d * pr.price_cents, 'zaehlung'); end if;
+    update products set stock = q where id = pr.id;
+  end loop;
+end $$;
+
+-- p_items: [{"id": uuid, "qty": int, "cents": int, "mhd": "YYYY-MM-DD"|null}]
+create or replace function a_purchase(p_day date, p_store text, p_items jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare it jsonb; pu uuid; total int := 0;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  insert into purchases(day, store) values (p_day, coalesce(p_store, '')) returning id into pu;
+  for it in select * from jsonb_array_elements(p_items) loop
+    insert into purchase_items(purchase_id, product_id, qty, cents, mhd)
+      values (pu, (it->>'id')::uuid, (it->>'qty')::int, (it->>'cents')::int, nullif(it->>'mhd', '')::date);
+    update products set stock = stock + (it->>'qty')::int,
+      cost_cents = case when (it->>'qty')::int > 0 then round((it->>'cents')::numeric / (it->>'qty')::int) else cost_cents end
+      where id = (it->>'id')::uuid;
+    total := total + (it->>'cents')::int;
+  end loop;
+  insert into journal(day, text, out_cents) values (p_day, 'Einkauf ' || coalesce(p_store, ''), total);
+end $$;
+
+create or replace function a_waste(p_product uuid, p_qty int) returns void
+language plpgsql security definer set search_path = public as $$
+declare pr products;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  select * into pr from products where id = p_product for update;
+  insert into sales(product_id, qty, cents, kind) values (pr.id, p_qty, p_qty * coalesce(pr.cost_cents, pr.price_cents), 'verlust');
+  update products set stock = greatest(stock - p_qty, 0) where id = pr.id;
+end $$;
+
+-- Rechte: Funktionen sind nicht öffentlich, nur gezielt freigegeben.
+revoke execute on all functions in schema public from public, anon, authenticated;
+grant execute on function today(), is_admin() to authenticated;
+grant execute on function k_names(text), k_login(text, uuid, text), k_logout(text), k_consent(text), k_state(text),
+  k_buy(text, uuid, int), k_undo(text, uuid), k_pin(text, text, text), k_wish(text, text), k_vote(text, uuid) to anon, authenticated;
+grant execute on function a_claim(text), a_person(text, text), a_pin(uuid, text), a_person_delete(uuid), a_pay(uuid, int),
+  a_fix(uuid, int), a_cash(int), a_count(jsonb), a_purchase(date, text, jsonb), a_waste(uuid, int) to authenticated;
+alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
