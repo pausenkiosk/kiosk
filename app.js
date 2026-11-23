@@ -8,7 +8,7 @@ const app = $('#app'), nav = $('#nav'), modal = $('#modal'), toastEl = $('#toast
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const cents = s => {
-  s = String(s ?? '').trim().replace(/[€\s]/g, '');
+  s = String(s ?? '').trim().replace(/[€\s]/g, '').replace(/[−–]/g, '-');
   if (!s) return null;
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   const n = Number(s);
@@ -189,13 +189,22 @@ function aLoginScreen() {
   });
 }
 
+/* Die Schnittstelle liefert höchstens 1000 Zeilen je Abfrage: seitenweise nachladen, sonst stimmen Summen nicht. */
+async function pages(mk) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = ok(await mk().range(from, from + 999));
+    out.push(...rows);
+    if (rows.length < 1000) return { data: out };
+  }
+}
 async function aLoad() {
   const since = new Date(Date.now() - 90 * 864e5).toISOString();
   const r = await Promise.all([
     SB.from('products').select('*').order('category').order('name'),
-    SB.from('sales').select('product_id,qty,cents,kind,at').gte('at', since),
-    SB.from('journal').select('day,text,in_cents,out_cents').order('day', { ascending: false }),
-    SB.from('ledger').select('person_id,amount_cents,kind,day'),
+    pages(() => SB.from('sales').select('product_id,qty,cents,kind,at').gte('at', since).order('at').order('id')),
+    pages(() => SB.from('journal').select('day,text,in_cents,out_cents').order('day', { ascending: false }).order('id')),
+    pages(() => SB.from('ledger').select('person_id,amount_cents,kind,day').order('id')),
     SB.from('persons').select('id,vorname,consent_at,locked_until,active').order('vorname'),
     SB.from('purchase_items').select('id,qty,mhd,product_id').eq('mhd_done', false).not('mhd', 'is', null).order('mhd'),
     SB.from('alerts').select('id,at,text').eq('seen', false).order('at', { ascending: false }),
@@ -552,9 +561,11 @@ document.addEventListener('click', async e => {
   if (a === 'm-x') return modalDone && modalDone(null);
   if (a === 'm-close') { modal.hidden = true; modal.innerHTML = ''; return; }
   if (a === 'go-admin') { location.hash = '#verwaltung'; return aLoginScreen(); }
-  const fn = kActs[a] || aActs[a]; if (!fn || busy) return;
+  const fn = kActs[a] || aActs[a]; if (!fn) return;
+  if (['a-tab', 'a-go', 'a-span'].includes(a)) return fn(el); // Wechsel zwischen Bereichen geht immer sofort
+  if (busy) return toast('Einen Moment, die letzte Eingabe wird noch gespeichert …');
   busy = true;
-  try { await fn(el); } catch (err) { console.error(err); toast('Das hat nicht geklappt: ' + (err.message || 'Fehler')); }
+  try { await fn(el); } catch (err) { console.error(err); toast(err.code === '23505' ? 'Diesen Namen gibt es schon.' : 'Das hat nicht geklappt: ' + (err.message || 'Fehler')); }
   busy = false;
 });
 async function shrink(file) {
