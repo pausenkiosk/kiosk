@@ -343,15 +343,18 @@ function vLeute() {
   });
   const url = location.origin + location.pathname + '?k=' + (d.set.kiosk_code || '');
   let qr = '';
-  try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = q.createSvgTag({ cellSize: 5, margin: 2 }); } catch { qr = ''; }
+  try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = `<img src="${q.createDataURL(12, 4)}" alt="QR-Code für den Kiosk">`; } catch { qr = ''; }
   return `<div class="paper"><h2>Schuldscheine</h2>${ps.length ? ps.slice().sort((a, b) => b.saldo - a.saldo).map(p =>
     `<div class="it"><i class="lamp ${p.locked_until && new Date(p.locked_until) > new Date() ? 'r' : p.consent_at ? 'g' : 'o'}"></i><span>${esc(p.vorname)}</span><span class="${p.saldo > 0 ? '' : 'mut'}">${eur(p.saldo)}</span>
      <span><button class="btn sm" data-a="a-pay" data-id="${p.id}">Zahlung</button> <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
     <p class="small mut">Grün: hat zugestimmt · leer: noch nicht angemeldet · rot: gerade gesperrt</p>
     <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button><button class="btn" data-a="a-persons">Mehrere als Liste</button></div></div>
     <div class="paper"><h2>Rangliste Umsatz</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
-    <div class="paper"><h2>QR-Code für den Kiosk</h2><p class="small mut">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste.</p><div class="qr">${qr}</div>
-      <p class="small brk">${esc(url)}</p><div class="row"><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
+    <div class="paper poster"><h2 class="noprint">QR-Code für den Kiosk</h2><p class="small mut noprint">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste. Zum Speichern lange auf den Code drücken und „In Fotos sichern“ wählen.</p>
+      <div class="printonly"><p class="ctr"><span class="logo">KIOSK</span></p><p class="ctr">Anschreiben mit dem Handy</p></div>
+      <div class="qr">${qr}</div>
+      <div class="printonly"><p>1. Code mit der Kamera scannen</p><p>2. Vornamen antippen, PIN eingeben</p><p>3. Produkt antippen und anschreiben</p><p>Bar bezahlen geht weiterhin. Mitmachen ist freiwillig.</p></div>
+      <p class="small brk noprint">${esc(url)}</p><div class="row noprint"><button class="btn pri" data-a="a-print">Aushang drucken</button><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
 }
 
 const reload = async () => { await aLoad(); aRender(); };
@@ -477,6 +480,7 @@ const aActs = {
     else toast(await rpc('a_person_delete', { p_person: p.id }) ? 'Person gelöscht.' : 'Nicht gelöscht: Der Schuldschein ist nicht ausgeglichen.');
     await reload();
   },
+  'a-print': () => { window.print(); },
   'a-copy': async el => { try { await navigator.clipboard.writeText(el.dataset.u); toast('Link kopiert.'); } catch { toast('Kopieren nicht möglich, bitte den Link markieren.'); } }
 };
 

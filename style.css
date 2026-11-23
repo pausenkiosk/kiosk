@@ -72,3 +72,14 @@ th{color:var(--mut);border-bottom:1px dashed var(--dash)}
 .brk{word-break:break-all}
 @media (prefers-reduced-motion:no-preference){#modal .paper{animation:up .16s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.4}}}
 textarea{min-height:120px;resize:vertical}
+.qr img{width:100%;max-width:300px;height:auto;image-rendering:pixelated}
+.printonly{display:none}
+@media print{
+  body{background:#fff;padding:0}
+  #nav,#toast,#modal,.paper:not(.poster),.noprint{display:none!important}
+  .paper::after{display:none}
+  .poster{padding:12mm;font-size:16pt;text-align:center}
+  .printonly{display:block}
+  .qr img{max-width:110mm}
+  .logo{font-size:34pt}
+}
