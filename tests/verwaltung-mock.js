@@ -15,7 +15,7 @@ const data = {
   persons: [{ id: 'a', vorname: 'Muster', consent_at: '2026-11-01', locked_until: null, active: true }, { id: 'b', vorname: 'Beispiel', consent_at: null, locked_until: new Date(Date.now() + 3e6).toISOString(), active: true }],
   purchase_items: [{ id: 'm1', qty: 6, mhd: day(5), product_id: 'p2' }, { id: 'm2', qty: 0, mhd: day(22), product_id: 'p1' }, { id: 'm3', qty: 0, mhd: day(200), product_id: 'p1' }],
   alerts: [{ id: 'al', at: ago(0), text: 'Anmeldung von Beispiel nach 3 falschen PINs für 1 Stunde gesperrt' }],
-  cash_counts: [{ day: day(0), cents: 1820, bar_cents: 1500 }],
+  cash_counts: [{ day: day(0), cents: 1820, bar_cents: 1500, at: ago(0) }],
   settings: [{ key: 'kiosk_code', value: 'abc123' }, { key: 'backup_at', value: day(-20) }, { key: 'kiosk_code_at', value: day(-45) }],
   requests: [{ id: 'r1', at: ago(0), text: 'Bitte Knopf größer', status: 'neu', answer: null }, { id: 'r2', at: ago(0), text: '8 Produktfotos', status: 'erledigt', answer: 'Eingetragen.' }],
   photo_jobs: [
@@ -36,7 +36,7 @@ const data = {
     const u = new URL(r.request().url()), m = r.request().method(), t = u.pathname.split('/').pop();
     if (m !== 'GET') calls.push(m + ' ' + u.pathname.replace('/rest/v1/', '') + ' ' + (r.request().postData() || '').slice(0, 110));
     if (u.pathname.includes('/rpc/is_admin')) return r.fulfill({ json: true });
-    if (u.pathname.includes('/rpc/a_cash')) return r.fulfill({ json: { paid: 500, bar: 1320 } });
+    if (u.pathname.includes('/rpc/a_cash_box')) return r.fulfill({ json: { paid: 500, bar: 1320 } });
     if (u.pathname.includes('/rpc/a_storno')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/storage/v1/object/list')) return r.fulfill({ json: [] });
     if (u.pathname.includes('/auth/')) return r.fulfill({ json: {} });

@@ -208,7 +208,7 @@ async function aLoad() {
     SB.from('persons').select('id,vorname,consent_at,locked_until,active').order('vorname'),
     SB.from('purchase_items').select('id,qty,mhd,product_id').eq('mhd_done', false).not('mhd', 'is', null).order('mhd'),
     SB.from('alerts').select('id,at,text').eq('seen', false).order('at', { ascending: false }),
-    SB.from('cash_counts').select('day,cents,bar_cents').order('at', { ascending: false }).limit(2),
+    SB.from('cash_counts').select('day,cents,bar_cents,at').order('at', { ascending: false }).limit(2),
     Promise.resolve({ data: [] }),
     SB.from('settings').select('key,value'),
     SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
@@ -253,7 +253,7 @@ function vBon() {
   const offen = d.ledger.reduce((a, l) => a + l.amount_cents, 0);
   let fehl = '–';
   if (d.cash.length) {
-    const to = pd(d.cash[0].day).getTime() + 864e5, from = d.cash[1] ? pd(d.cash[1].day).getTime() + 864e5 : 0;
+    const to = new Date(d.cash[0].at).getTime(), from = d.cash[1] ? new Date(d.cash[1].at).getTime() : 0;
     const ware = d.sales.filter(s => s.kind === 'zaehlung' && new Date(s.at) < to && new Date(s.at) >= from).reduce((a, s) => a + s.cents, 0);
     fehl = eur(ware - (d.cash[0].bar_cents ?? d.cash[0].cents));
   }
@@ -503,10 +503,10 @@ const aActs = {
     const v = await ask('Kassensturz', [{ k: 'c', label: 'Wie viel Geld war in der Kasse? (€)', mode: 'decimal' }], 'Buchen',
       '<p class="small mut">Kasse leeren, alles zählen und den Betrag eintragen. Schuldschein-Zahlungen, die du seit dem letzten Kassensturz gebucht hast, zieht die App ab; der Rest zählt als Barverkauf.</p>');
     const c = v ? cents(v.c) : null; if (c === null || c < 0) return;
-    const r = await rpc('a_cash', { p_cents: c }) || { paid: 0, bar: c };
-    toast(r.bar < 0 ? `Achtung: In der Kasse waren ${eur(c)} €, du hast aber ${eur(r.paid)} € Schuldschein-Zahlungen gebucht. Es fehlen ${eur(-r.bar)} €.`
-      : `Gebucht: ${eur(r.bar)} € Barverkäufe` + (r.paid ? `, ${eur(r.paid)} € waren Schuldschein-Zahlungen.` : '.'));
+    const r = await rpc('a_cash_box', { p_cents: c }) || { paid: 0, bar: c };
     await reload();
+    if (r.bar < 0) await ask('Achtung: Es fehlt Geld', [], 'Verstanden', `<p>In der Kasse waren ${eur(c)} €. Du hast seit dem letzten Kassensturz aber ${eur(r.paid)} € Schuldschein-Zahlungen gebucht.</p><p class="big neg">Es fehlen ${eur(-r.bar)} €.</p><p class="small mut">Als Barverkauf wurden 0,00 € gebucht. Prüfe, ob eine Zahlung nicht in die Kasse gelegt oder doppelt gebucht wurde.</p>`);
+    else toast(`Gebucht: ${eur(r.bar)} € Barverkäufe` + (r.paid ? `, ${eur(r.paid)} € waren Schuldschein-Zahlungen.` : '.'));
   },
   'a-storno': async el => {
     const j = A.d.journal.find(x => x.id === el.dataset.id);

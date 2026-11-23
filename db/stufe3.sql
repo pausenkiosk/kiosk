@@ -1,10 +1,17 @@
-
 -- ---------- Ausbaustufe 3: Kassensturz nach Kasseninhalt, Storno, QR-Code-Alter ----------
 -- journal.kind: excel | hand | bar | zahlung | einkauf. journal.ref zeigt auf den Kassensturz bzw. Einkauf, damit ein Storno beides entfernt.
 alter table journal add column if not exists kind text;
 alter table journal add column if not exists ref uuid;
-alter table journal add column if not exists at timestamptz not null default now();
-alter table cash_counts add column if not exists at timestamptz not null default now();
+-- Zeitpunkt: neue Zeilen bekommen now(). Alte Zeilen kennen nur den Tag; Buchungen gelten als mittags,
+-- Kassenstürze als Tagesende, damit Zahlungen nach einem alten Kassensturz beim nächsten abgezogen werden.
+alter table journal add column if not exists at timestamptz;
+alter table cash_counts add column if not exists at timestamptz;
+update journal set at = (day + time '12:00') at time zone 'Europe/Berlin' where at is null;
+update cash_counts set at = (day + time '23:59') at time zone 'Europe/Berlin' where at is null;
+alter table journal alter column at set default now();
+alter table journal alter column at set not null;
+alter table cash_counts alter column at set default now();
+alter table cash_counts alter column at set not null;
 alter table cash_counts add column if not exists bar_cents int;
 update journal set kind = case when source = 'excel' then 'excel' when source = 'hand' then 'hand' when text = 'Barverkäufe' then 'bar'
   when text = 'Zahlung Schuldschein' then 'zahlung' when text like 'Einkauf %' then 'einkauf' else 'hand' end where kind is null;
@@ -20,10 +27,19 @@ begin
   insert into journal(day, text, in_cents, kind) values (today(), 'Zahlung Schuldschein', p_cents, 'zahlung');
 end $$;
 
--- Kassensturz: p_cents ist der gesamte Inhalt der Kasse beim Leeren.
+-- Bisherige App-Fassung: p_cents sind die Barverkäufe seit der letzten Zählung. Bleibt für ältere Fassungen im Handy-Speicher erhalten.
+create or replace function a_cash(p_cents int) returns void
+language plpgsql security definer set search_path = public as $$
+declare cid uuid;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  insert into cash_counts(day, cents, bar_cents) values (today(), p_cents, p_cents) returning id into cid;
+  if p_cents > 0 then insert into journal(day, text, in_cents, kind, ref) values (today(), 'Barverkäufe', p_cents, 'bar', cid); end if;
+end $$;
+
+-- Kassensturz nach Kasseninhalt: p_cents ist der gesamte Inhalt der Kasse beim Leeren.
 -- Schuldschein-Zahlungen seit dem letzten Kassensturz liegen mit in der Kasse und sind schon gebucht; der Rest sind Barverkäufe.
-drop function if exists a_cash(int);
-create function a_cash(p_cents int) returns jsonb
+create or replace function a_cash_box(p_cents int) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare last timestamptz; paid int; bar int; cid uuid;
 begin
@@ -75,5 +91,5 @@ begin
   return 'nicht_moeglich';
 end $$;
 
-revoke execute on function a_cash(int), a_storno(uuid) from public, anon;
-grant execute on function a_cash(int), a_storno(uuid) to authenticated;
+revoke execute on function a_cash(int), a_cash_box(int), a_storno(uuid) from public, anon;
+grant execute on function a_cash(int), a_cash_box(int), a_storno(uuid) to authenticated;
