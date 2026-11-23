@@ -8,3 +8,6 @@ Einkauf mit Haltbarkeitsdaten, Einnahmen und Ausgaben nach Woche, Monat und Jahr
 - `db/schema.sql`: Tabellen, Zugriffsregeln und Funktionen für Supabase
 
 Daten liegen ausschließlich in der Supabase-Datenbank, nicht in diesem Repository.
+
+Nach jeder Änderung an `app.js` oder `style.css` die Versionsnummer `?v=` in `index.html` erhöhen, damit Handys die neue Fassung laden.
+Änderungen an Datenbankfunktionen so vornehmen, dass die vorherige App-Fassung weiter funktioniert.
