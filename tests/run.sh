@@ -11,10 +11,11 @@
 #   KIOSK_TEST_CODE         Kiosk-Code für den QR-Link, Standard: TESTKIOSK2468
 #   SUPABASE_ACCESS_TOKEN   Verwaltungs-Token fürs Einspielen der Testdaten
 #                           (in der Cloud-Sitzung setzt der Proxy ihn ein, dann weglassen)
+#   KIOSK_APP_REF           Git-Stand, dessen App getestet wird (z. B. origin/next). Ohne Angabe: Dateien im Arbeitsordner.
 #   KIOSK_SKIP_SEED=1       Testdaten nicht neu einspielen
 #   KIOSK_TEST_PORT         Standard: 8765
 #
-# Aufruf: tests/run.sh [sperren|kollege|verwalter|grenzen ...]   (ohne Angabe: alles)
+# Aufruf: tests/run.sh [sperren|kollege|verwalter|kasse|grenzen|uebergang ...]   (ohne Angabe: alles)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -55,7 +56,13 @@ TMP="$(mktemp -d)"
 SRV=""
 cleanup() { [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true; rm -rf "$TMP"; }
 trap cleanup EXIT
-cp -r index.html app.js style.css vendor icon-180.png icon-512.png "$TMP/"
+if [ -n "${KIOSK_APP_REF:-}" ]; then
+  echo "App-Fassung: $KIOSK_APP_REF ($(git rev-parse --short "$KIOSK_APP_REF"))"
+  git archive "$KIOSK_APP_REF" index.html app.js style.css vendor icon-180.png icon-512.png | tar -x -C "$TMP"
+else
+  cp -r index.html app.js style.css vendor icon-180.png icon-512.png "$TMP/"
+fi
+echo "Getestet wird $(grep -o 'app.js?v=[0-9]*' "$TMP/index.html")"
 python3 - "$TMP" "$ECHT" <<'PY'
 import os, re, sys
 tmp, echt = sys.argv[1], sys.argv[2]

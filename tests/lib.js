@@ -145,6 +145,17 @@ async function anonApi() {
   return request.newContext({ baseURL: CFG.api, proxy, extraHTTPHeaders: { apikey: CFG.key, Authorization: 'Bearer ' + CFG.key, 'Content-Type': 'application/json' } });
 }
 
+/* SQL direkt im Testprojekt (Verwaltungs-API). Nur für Dinge, die die App selbst nicht kann, z. B. Fotos künstlich altern lassen. */
+async function sql(query) {
+  const ctx = await request.newContext({ proxy });
+  try {
+    const r = await ctx.post(`https://api.supabase.com/v1/projects/${CFG.ref}/database/query`, {
+      headers: { Authorization: 'Bearer ' + (process.env.SUPABASE_ACCESS_TOKEN || 'proxy-injected'), 'Content-Type': 'application/json' }, data: { query } });
+    if (!r.ok()) throw new Error(`SQL fehlgeschlagen (${r.status()}): ${(await r.text()).slice(0, 300)}`);
+    return r.json();
+  } finally { await ctx.dispose(); }
+}
+
 const isoDay = (offset = 0) => {
   const d = new Date(Date.now() + offset * 864e5);
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(d);
@@ -159,4 +170,4 @@ function summary() {
   return bad.length;
 }
 
-module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, isoDay, summary, results };
+module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };
