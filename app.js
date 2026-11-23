@@ -409,9 +409,16 @@ const aActs = {
       { k: 'name', label: 'Name', value: p.name }, { k: 'cat', label: 'Gruppe', value: p.category },
       { k: 'price', label: 'Verkaufspreis €', value: p.price_cents ? eur(p.price_cents) : '', mode: 'decimal' },
       { k: 'sale', label: 'Abverkaufspreis € (leer = keiner)', value: p.sale_cents != null ? eur(p.sale_cents) : '', mode: 'decimal' },
-      { k: 'active', label: 'Im Kiosk sichtbar', type: 'select', value: p.active ? '1' : '0', options: [['1', 'Ja'], ['0', 'Nein']] }],
+      { k: 'active', label: 'Im Kiosk sichtbar', type: 'select', value: p.active ? '1' : '0', options: p.id ? [['1', 'Ja'], ['0', 'Nein'], ['del', 'Endgültig löschen …']] : [['1', 'Ja'], ['0', 'Nein']] }],
       'Speichern', p.cost_cents ? `<p class="small mut">Letzter Einkaufspreis: ${eur(p.cost_cents)} € je Stück</p>` : '');
-    if (!v || !v.name.trim()) return;
+    if (!v) return;
+    if (v.active === 'del') {
+      const sure = await ask(p.name + ' endgültig löschen?', [], 'Endgültig löschen',
+        '<p>Das Produkt verschwindet samt Bestand, Verkaufszahlen, Zählungen und Haltbarkeitsdaten. Das lässt sich nicht rückgängig machen. Einnahmen und Ausgaben unter Kasse und die Schuldscheine bleiben unverändert.</p>');
+      if (!sure) return;
+      ok(await SB.from('products').delete().eq('id', p.id)); toast(p.name + ' gelöscht.'); return reload();
+    }
+    if (!v.name.trim()) return;
     const price = cents(v.price) || 0;
     if (v.active === '1' && price <= 0) return toast('Sichtbare Produkte brauchen einen Verkaufspreis.');
     const row = { name: v.name.trim(), category: v.cat.trim() || 'Sonstiges', price_cents: price, sale_cents: cents(v.sale), active: v.active === '1' };
