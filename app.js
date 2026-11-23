@@ -526,7 +526,7 @@ document.addEventListener('change', async e => {
 (async function boot() {
   try {
     const u = new URL(location.href), k = u.searchParams.get('k');
-    if (k) { LS.set('kcode', k); history.replaceState(null, '', u.pathname); }
+    if (k) LS.set('kcode', k);
     const { data: { session } } = await SB.auth.getSession();
     if (!k && (session || /verwaltung|access_token/.test(location.hash))) return await aBoot(session);
     K.code = LS.get('kcode');
