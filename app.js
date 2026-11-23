@@ -265,7 +265,7 @@ function vBon() {
     </div>
     <div class="paper"><div class="row"><button class="btn pri" data-a="a-go" data-t="regal">Zählen</button><button class="btn" data-a="a-go" data-t="einkauf">Einkauf</button><button class="btn" data-a="a-go" data-t="leute">Zahlung</button></div></div>
     <div class="paper"><h2>An Claude</h2><p class="small mut">Verbesserung, Fehler oder Auftrag eintippen oder über das Mikrofon der Tastatur diktieren. Claude liest das beim nächsten Durchlauf.</p>
-      ${d.requests.map(q => `<div class="it"><i class="lamp ${q.status === 'neu' ? 'y' : q.status === 'erledigt' ? 'g' : 'r'}"></i><span>${esc(q.text)}${q.answer ? `<br><span class="mut">Claude: ${esc(q.answer)}</span>` : ''}</span><span></span><span class="mut">${dshort(q.at.slice(0, 10))}</span></div>`).join('')}
+      ${d.requests.map(q => `<div class="it"><i class="lamp ${q.status === 'erledigt' ? 'g' : q.status === 'rueckfrage' ? 'r' : 'y'}"></i><span>${esc(q.text)}${q.answer ? `<br><span class="mut">Claude: ${esc(q.answer)}</span>` : ''}</span><span></span><span class="mut">${dshort(q.at.slice(0, 10))}</span></div>`).join('')}
       <div class="row"><button class="btn pri" data-a="a-req">Nachricht an Claude</button></div></div>`;
 }
 
