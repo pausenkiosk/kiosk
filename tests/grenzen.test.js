@@ -1,0 +1,55 @@
+'use strict';
+/* Viele Buchungen: Stimmen Kassenstand und Schuldscheine auch noch bei mehr als 1000 Einträgen?
+   (Die Datenbank-Schnittstelle liefert pro Abfrage standardmäßig höchstens 1000 Zeilen.)
+   Läuft als letzter Teil, weil er viele Testbuchungen anlegt. */
+const { CFG, step, setGroup, expect, eq, newPage, lnValue, see, prow } = require('./lib');
+
+const toCents = s => Math.round(Number(s.replace(/\./g, '').replace(',', '.').replace('−', '-')) * 100);
+
+module.exports = async function grenzen(browser) {
+  setGroup('Viele Buchungen');
+  const page = await newPage(browser);
+  const S = (n, f) => step(n, f, page);
+  const N = 1200;
+  let before = null;
+
+  await S('Vorbereitung: anmelden und 1200 kleine Buchungen je Kassenbuch und Schuldschein anlegen', async () => {
+    await page.goto(CFG.url + '#verwaltung');
+    await page.locator('#alog').waitFor();
+    await page.fill('#em', CFG.email); await page.fill('#pw', CFG.pw);
+    await page.locator('#alog button.pri').click();
+    await see(page, 'KASSENSTAND');
+    before = { stand: toCents(await lnValue(page, 'KASSENSTAND')), offen: toCents(await lnValue(page, 'Offene Schuldscheine')) };
+    const r = await page.evaluate(async n => {
+      const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date());
+      const gerd = (await SB.from('persons').select('id').eq('vorname', 'Gerd')).data[0].id;
+      const before = (await SB.from('ledger').select('amount_cents').eq('person_id', gerd)).data.reduce((a, l) => a + l.amount_cents, 0);
+      for (let i = 0; i < n; i += 400) {
+        const k = Math.min(400, n - i);
+        let e = (await SB.from('journal').insert(Array.from({ length: k }, () => ({ day, text: 'Massentest', in_cents: 1, source: 'hand' })))).error;
+        if (e) throw new Error(e.message);
+        e = (await SB.from('ledger').insert(Array.from({ length: k }, () => ({ person_id: gerd, day, amount_cents: 1, kind: 'kauf' })))).error;
+        if (e) throw new Error(e.message);
+      }
+      return before;
+    }, N);
+    before.gerd = r;
+    await page.reload();
+    await see(page, 'KASSENSTAND');
+  });
+  await S('Kassenstand zählt alle Buchungen mit (auch über 1000)', async () => {
+    expect(before, 'Vorbereitung fehlgeschlagen');
+    eq(toCents(await lnValue(page, 'KASSENSTAND')), before.stand + N, 'Kassenstand in Cent nach 1200 Buchungen zu je 0,01 €');
+  });
+  await S('Offene Schuldscheine zählen alle Buchungen mit (auch über 1000)', async () => {
+    expect(before, 'Vorbereitung fehlgeschlagen');
+    eq(toCents(await lnValue(page, 'Offene Schuldscheine')), before.offen + N, 'Offene Schuldscheine in Cent nach 1200 Buchungen zu je 0,01 €');
+  });
+  await S('Schuldschein einer Person stimmt bei über 1000 Buchungen', async () => {
+    expect(before, 'Vorbereitung fehlgeschlagen');
+    await page.locator('#nav [data-t="leute"]').click();
+    const txt = (await prow(page, 'Gerd').locator('span').nth(1).innerText()).trim();
+    eq(toCents(txt), before.gerd + N, 'Schuldschein Gerd in Cent');
+  });
+  await page.context().close();
+};
