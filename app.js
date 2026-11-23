@@ -261,7 +261,11 @@ function vBon() {
     <div class="paper"><div class="row"><button class="btn pri" data-a="a-go" data-t="regal">Zählen</button><button class="btn" data-a="a-go" data-t="einkauf">Einkauf</button><button class="btn" data-a="a-go" data-t="leute">Zahlung</button></div></div>
     <div class="paper"><h2>An Claude</h2><p class="small mut">Verbesserung, Fehler oder Auftrag eintippen oder über das Mikrofon der Tastatur diktieren. Claude liest das beim nächsten Durchlauf.</p>
       ${d.requests.map(q => `<div class="it"><i class="lamp ${q.status === 'erledigt' ? 'g' : q.status === 'rueckfrage' ? 'r' : 'y'}"></i><span>${esc(q.text)}${q.answer ? `<br><span class="mut">Claude: ${esc(q.answer)}</span>` : ''}</span><span></span><span class="mut">${dshort(q.at.slice(0, 10))}</span></div>`).join('')}
-      <div class="row"><button class="btn pri" data-a="a-req">Nachricht an Claude</button></div></div>`;
+      <div class="row"><button class="btn pri" data-a="a-req">Nachricht an Claude</button></div></div>
+    <div class="paper"><h2>Sicherung</h2>${(() => { const b = d.set.backup_at, age = b ? Math.floor((t - pd(b)) / 864e5) : null;
+      return `<p class="small ${age === null || age > 14 ? 'neg' : 'mut'}">${age === null ? 'Du hast noch keine Sicherung heruntergeladen.' : `Letzte heruntergeladene Sicherung: ${dshort(b)} (vor ${age} Tagen).`}${age === null || age > 14 ? ' Bitte jetzt sichern.' : ''}</p>`; })()}
+      <p class="small mut">Speichert alle Kiosk-Daten als Datei auf dein Gerät, ohne PINs und ohne Kiosk-Code. Die Datei enthält Vornamen und Schuldenstände, also nicht weitergeben.</p>
+      <div class="row"><button class="btn" data-a="a-backup">Sicherung herunterladen</button></div></div>`;
 }
 
 function vRegal() {
@@ -481,6 +485,32 @@ const aActs = {
     await reload();
   },
   'a-print': () => { window.print(); },
+  'a-backup': async () => {
+    toast('Sicherung wird erstellt …');
+    const all = async (table, cols = '*') => {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = ok(await SB.from(table).select(cols).range(from, from + 999));
+        out.push(...rows); if (rows.length < 1000) return out;
+      }
+    };
+    const data = { erstellt: new Date().toISOString() };
+    for (const tb of ['products', 'sales', 'ledger', 'journal', 'purchases', 'purchase_items', 'counts', 'cash_counts', 'alerts', 'requests']) data[tb] = await all(tb);
+    data.persons = await all('persons', 'id,vorname,consent_at,active,created_at');
+    data.settings = (await all('settings')).filter(x => x.key !== 'kiosk_code' && x.key !== 'setup_code');
+    const name = `kiosk-sicherung-${iso(new Date())}.json`;
+    const file = new File([JSON.stringify(data, null, 1)], name, { type: 'application/json' });
+    let saved = false;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); saved = true; } catch (e) { if (e.name === 'AbortError') return toast('Sicherung abgebrochen.'); }
+    }
+    if (!saved) {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    }
+    ok(await SB.from('settings').upsert({ key: 'backup_at', value: iso(new Date()) }));
+    toast('Sicherung erstellt. Auf dem iPhone „In Dateien sichern“ wählen.'); await reload();
+  },
   'a-copy': async el => { try { await navigator.clipboard.writeText(el.dataset.u); toast('Link kopiert.'); } catch { toast('Kopieren nicht möglich, bitte den Link markieren.'); } }
 };
 
