@@ -6,8 +6,8 @@ alter table journal add column if not exists ref uuid;
 -- Kassenstürze als Tagesende, damit Zahlungen nach einem alten Kassensturz beim nächsten abgezogen werden.
 alter table journal add column if not exists at timestamptz;
 alter table cash_counts add column if not exists at timestamptz;
-update journal set at = (day + time '12:00') at time zone 'Europe/Berlin' where at is null;
-update cash_counts set at = (day + time '23:59') at time zone 'Europe/Berlin' where at is null;
+update journal set at = least((day + time '12:00') at time zone 'Europe/Berlin', now()) where at is null;
+update cash_counts set at = least((day + time '23:59') at time zone 'Europe/Berlin', now()) where at is null;
 alter table journal alter column at set default now();
 alter table journal alter column at set not null;
 alter table cash_counts alter column at set default now();
@@ -67,6 +67,31 @@ begin
     total := total + (it->>'cents')::int;
   end loop;
   insert into journal(day, text, out_cents, kind, ref) values (p_day, 'Einkauf ' || coalesce(p_store, ''), total, 'einkauf', pu);
+end $$;
+
+-- Zählung und Entsorgung mit genauem Zeitpunkt, damit der Fehlbetrag zwischen zwei Kassenstürzen stimmt.
+create or replace function a_count(p_items jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare it jsonb; pr products; q int; d int;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  for it in select * from jsonb_array_elements(p_items) loop
+    select * into pr from products where id = (it->>'id')::uuid for update;
+    q := (it->>'qty')::int; d := pr.stock - q;
+    insert into counts(day, product_id, expected, counted) values (today(), pr.id, pr.stock, q);
+    if d > 0 then insert into sales(product_id, qty, cents, kind, at) values (pr.id, d, d * pr.price_cents, 'zaehlung', now()); end if;
+    update products set stock = q where id = pr.id;
+  end loop;
+end $$;
+
+create or replace function a_waste(p_product uuid, p_qty int) returns void
+language plpgsql security definer set search_path = public as $$
+declare pr products;
+begin
+  if not is_admin() then raise exception 'nicht erlaubt'; end if;
+  select * into pr from products where id = p_product for update;
+  insert into sales(product_id, qty, cents, kind, at) values (pr.id, p_qty, p_qty * coalesce(pr.cost_cents, pr.price_cents), 'verlust', now());
+  update products set stock = greatest(stock - p_qty, 0) where id = pr.id;
 end $$;
 
 -- Storno eigener Eingaben: Buchung von Hand, letzter Kassensturz, Einkauf (Bestand wird zurückgenommen).
