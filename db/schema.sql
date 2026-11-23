@@ -425,3 +425,23 @@ insert into storage.buckets (id, name, public) values ('fotos', 'fotos', false) 
 drop policy if exists kiosk_fotos_adm on storage.objects;
 create policy kiosk_fotos_adm on storage.objects for all to authenticated
   using (bucket_id = 'fotos' and public.is_admin()) with check (bucket_id = 'fotos' and public.is_admin());
+
+-- ---------- Kollegen-Ansicht gekürzt: nur Bestand, Schuldschein, Anschreiben, PIN ----------
+revoke execute on function k_wish(text, text), k_vote(text, uuid) from anon, authenticated;
+create or replace function k_state(p_token text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token);
+begin
+  if pid is null then return null; end if;
+  perform k_cleanup();
+  return jsonb_build_object(
+    'vorname', (select vorname from persons where id = pid),
+    'consent', (select consent_at is not null from persons where id = pid),
+    'saldo', coalesce((select sum(amount_cents) from ledger where person_id = pid), 0),
+    'entries', coalesce((select jsonb_agg(e) from (
+        select jsonb_build_object('id', id, 'day', day, 'cents', amount_cents, 'kind', kind, 'undo', ts is not null) e
+        from ledger where person_id = pid order by day desc, ts desc nulls last limit 30) x), '[]'::jsonb),
+    'products', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'cat', category,
+        'cents', coalesce(sale_cents, price_cents), 'normal', price_cents, 'sale', sale_cents is not null, 'stock', stock)
+        order by category, name) from products where active), '[]'::jsonb));
+end $$;

@@ -114,18 +114,15 @@ function kRender() {
   s.products.forEach(p => { (cats[p.cat] = cats[p.cat] || []).push(p); });
   const prod = Object.keys(cats).map(c => `<h2>${esc(c)}</h2>` + cats[c].map(p =>
     `<button class="it" data-a="k-buy" data-id="${p.id}"><i class="lamp ${p.stock > 0 ? 'g' : 'o'}"></i><span>${esc(p.name)}${p.sale ? ' <b class="neg">Abverkauf</b>' : ''}</span>` +
-    `<span>${p.sale ? `<s>${eur(p.normal)}</s>` : ''}</span><span>${eur(p.cents)} €</span></button>`).join('')).join('');
+    `<span class="mut">${p.stock > 0 ? p.stock + ' St' : 'aus'}</span><span>${p.sale ? `<s>${eur(p.normal)}</s> ` : ''}${eur(p.cents)} €</span></button>`).join('')).join('');
   app.innerHTML = `<div class="paper">${head('Schuldschein von ' + esc(s.vorname))}
       ${ln(s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN', eur(Math.abs(s.saldo)) + ' €', 'big')}
       <p class="small mut">Bezahlen: Betrag dem Betreiber geben, er trägt die Zahlung ein.</p></div>
-    <div class="paper"><h2>Anschreiben</h2><p class="small mut">Produkt antippen. Leeres Kästchen: laut Bestand gerade aus.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
+    <div class="paper"><h2>Bestand und Anschreiben</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen</h2>${s.entries.length ? s.entries.map(e =>
       `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Zahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
       `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents > 0 ? '' : '−'}${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
-    <div class="paper"><h2>Wunschliste</h2><p class="small mut">Was fehlt im Kiosk? Antippen zählt als Stimme.</p>${s.wishes.map(w =>
-      `<button class="it" data-a="k-vote" data-id="${w.id}"><i class="lamp ${w.mine ? 'g' : 'o'}"></i><span>${esc(w.text)}</span><span></span><span>${w.votes}</span></button>`).join('')}
-      <div class="row"><button class="btn" data-a="k-wish">Wunsch eintragen</button></div></div>
     <div class="paper"><div class="row"><button class="btn" data-a="k-pin">PIN ändern</button><button class="btn" data-a="k-logout">Abmelden</button></div></div>`;
 }
 
@@ -154,8 +151,6 @@ const kActs = {
     await kReload();
   },
   'k-undo': async el => { const r = await rpc('k_undo', { p_token: K.token, p_entry: el.dataset.id }); toast(r.ok ? 'Buchung zurückgenommen.' : 'Zu spät, bitte den Betreiber ansprechen.'); await kReload(); },
-  'k-vote': async el => { await rpc('k_vote', { p_token: K.token, p_wish: el.dataset.id }); await kReload(); },
-  'k-wish': async () => { const v = await ask('Wunsch eintragen', [{ k: 't', label: 'Welches Produkt fehlt dir?', max: 60 }], 'Eintragen'); if (v && v.t.trim()) { await rpc('k_wish', { p_token: K.token, p_text: v.t }); await kReload(); } },
   'k-pin': async () => {
     const v = await ask('PIN ändern', [{ k: 'o', label: 'Alte PIN', type: 'password', mode: 'numeric', max: 4 }, { k: 'n', label: 'Neue PIN (4 Ziffern)', type: 'password', mode: 'numeric', max: 4 }]);
     if (!v) return;
@@ -205,7 +200,7 @@ async function aLoad() {
     SB.from('purchase_items').select('id,qty,mhd,product_id').eq('mhd_done', false).not('mhd', 'is', null).order('mhd'),
     SB.from('alerts').select('id,at,text').eq('seen', false).order('at', { ascending: false }),
     SB.from('cash_counts').select('day,cents').order('day', { ascending: false }).limit(2),
-    SB.from('wishes').select('id,text,wish_votes(count)').eq('done', false),
+    Promise.resolve({ data: [] }),
     SB.from('settings').select('key,value'),
     SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
     SB.from('photo_jobs').select('id,at,paths,status,result,note').neq('status', 'fertig').order('at', { ascending: false })
@@ -280,9 +275,7 @@ function vRegal() {
     <div class="row">${A.counting ? '<button class="btn" data-a="a-cnt-x">Abbrechen</button><button class="btn pri" data-a="a-cnt-ok">Zählung speichern</button>'
       : '<button class="btn pri" data-a="a-cnt">Zählen</button><button class="btn" data-a="a-foto">Regalfoto</button><button class="btn" data-a="a-prod" data-id="">Neues Produkt</button>'}</div>
     ${A.counting ? '' : '<input type="file" id="foto" accept="image/*" multiple hidden>' + d.jobs.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>Foto vom ${dshort(j.at.slice(0, 10))}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-job" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-jobdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
-    ${A.counting ? '' : `<div class="paper"><h2>Wunschliste</h2>${d.wishes.length ? d.wishes.map(w => ({ ...w, n: (w.wish_votes[0] || {}).count || 0 })).sort((a, b) => b.n - a.n).map(w =>
-      `<div class="it"><i></i><span>${esc(w.text)}</span><span>${w.n} Stimmen</span><span><button class="btn sm" data-a="a-wish" data-id="${w.id}">Erledigt</button></span></div>`).join('') : '<p class="mut">Keine Wünsche.</p>'}</div>
-    <div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
+    ${A.counting ? '' : `<div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
       <div class="row"><button class="btn" data-a="a-amp">Schwellen ändern</button></div></div>`}`;
 }
 
@@ -418,7 +411,6 @@ const aActs = {
     ok(p.id ? await SB.from('products').update(row).eq('id', p.id) : await SB.from('products').insert(row));
     await reload();
   },
-  'a-wish': async el => { ok(await SB.from('wishes').update({ done: true }).eq('id', el.dataset.id)); await reload(); },
   'a-amp': async () => {
     const v = await ask('Ampel-Schwellen', [{ k: 'r', label: 'Rot, wenn der Bestand weniger als … Wochen reicht', value: A.d.rot, mode: 'decimal' }, { k: 'g', label: 'Gelb, wenn weniger als … Wochen', value: A.d.gelb, mode: 'decimal' }]);
     if (!v) return;
