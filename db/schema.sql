@@ -448,3 +448,9 @@ end $$;
 
 -- ---------- Haltbarkeitsdaten auch ohne Einkauf (z. B. aus Produktfotos) ----------
 alter table purchase_items alter column purchase_id drop not null;
+
+-- ---------- Einkauf per Bon-Foto, Screenshot oder Ansage ----------
+-- kind 'foto': Regal- oder Produktfotos. kind 'einkauf': Bon/Screenshot (paths) und/oder Ansage (text);
+-- result = {"store": text, "day": "YYYY-MM-DD", "items": [{"id": Produkt, "qty": int, "cents": int}]}
+alter table photo_jobs add column if not exists kind text not null default 'foto';
+alter table photo_jobs add column if not exists text text;

@@ -1,0 +1,75 @@
+// Verwalter-Ansichten mit erfundenen Daten prüfen.
+// Alle Anfragen an Supabase werden hier beantwortet, die echte Datenbank wird nicht berührt.
+// Start: im Projektordner `python3 -m http.server 8765`, dann `node tests/verwaltung-mock.js <Ordner für Bildschirmfotos>`
+const { chromium } = require('playwright');
+const day = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+const ago = n => new Date(Date.now() - n * 864e5).toISOString();
+const data = {
+  products: [
+    { id: 'p1', name: 'Cola', category: 'Getränke', price_cents: 100, sale_cents: null, cost_cents: 60, stock: 3, active: true, created_at: '2026-01-01T00:00:00Z' },
+    { id: 'p2', name: 'Twix', category: 'Süßes', price_cents: 80, sale_cents: 50, cost_cents: 90, stock: 12, active: true, created_at: '2026-01-01T00:00:00Z' },
+    { id: 'p3', name: 'Alt', category: 'Süßes', price_cents: 0, sale_cents: null, cost_cents: null, stock: 0, active: false, created_at: '2026-01-01T00:00:00Z' }],
+  sales: [{ product_id: 'p1', qty: 20, cents: 2000, kind: 'app', at: ago(5) }, { product_id: 'p2', qty: 2, cents: 160, kind: 'zaehlung', at: ago(3) }],
+  journal: [{ day: day(-2), text: 'Einkauf Rewe', in_cents: 0, out_cents: 1500 }, { day: day(-40), text: 'Verkauf', in_cents: 3000, out_cents: 0 }, { day: '2025-12-01', text: 'Verkauf', in_cents: 500, out_cents: 0 }],
+  ledger: [{ person_id: 'a', amount_cents: 350, kind: 'kauf', day: day(-1) }, { person_id: 'a', amount_cents: -100, kind: 'zahlung', day: day(0) }],
+  persons: [{ id: 'a', vorname: 'Muster', consent_at: '2026-11-01', locked_until: null, active: true }, { id: 'b', vorname: 'Beispiel', consent_at: null, locked_until: new Date(Date.now() + 3e6).toISOString(), active: true }],
+  purchase_items: [{ id: 'm1', qty: 6, mhd: day(5), product_id: 'p2' }, { id: 'm2', qty: 0, mhd: day(22), product_id: 'p1' }, { id: 'm3', qty: 0, mhd: day(200), product_id: 'p1' }],
+  alerts: [{ id: 'al', at: ago(0), text: 'Anmeldung von Beispiel nach 3 falschen PINs für 1 Stunde gesperrt' }],
+  cash_counts: [{ day: day(0), cents: 1820 }],
+  settings: [{ key: 'kiosk_code', value: 'abc123' }, { key: 'backup_at', value: day(-20) }],
+  requests: [{ id: 'r1', at: ago(0), text: 'Bitte Knopf größer', status: 'neu', answer: null }, { id: 'r2', at: ago(0), text: '8 Produktfotos', status: 'erledigt', answer: 'Eingetragen.' }],
+  photo_jobs: [
+    { id: 'j1', at: ago(0), paths: ['x'], status: 'vorschlag', result: [{ id: 'p1', qty: 7 }], note: 'Twix verdeckt', kind: 'foto', text: null },
+    { id: 'j2', at: ago(0), paths: [], status: 'vorschlag', result: { store: 'Rewe', day: day(-1), items: [{ id: 'p1', qty: 12, cents: 948 }, { id: 'p2', qty: 6, cents: 390 }] }, note: 'Preis Twix geschätzt', kind: 'einkauf', text: 'bei Rewe' },
+    { id: 'j3', at: ago(0), paths: ['a', 'b'], status: 'neu', result: null, note: null, kind: 'einkauf', text: null }]
+};
+(async () => {
+  const b = await chromium.launch();
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.addInitScript(() => localStorage.setItem('sb-kglxlmjhrzeaswqadfnn-auth-token', JSON.stringify({
+    access_token: 'x', refresh_token: 'y', token_type: 'bearer', expires_in: 99999, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: 'u', email: 't@example.invalid' } })));
+  const p = await ctx.newPage();
+  const errs = [], calls = [];
+  p.on('pageerror', e => errs.push(e.message));
+  p.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()); });
+  await p.route('**/kglxlmjhrzeaswqadfnn.supabase.co/**', r => {
+    const u = new URL(r.request().url()), m = r.request().method(), t = u.pathname.split('/').pop();
+    if (m !== 'GET') calls.push(m + ' ' + u.pathname.replace('/rest/v1/', '') + ' ' + (r.request().postData() || '').slice(0, 110));
+    if (u.pathname.includes('/rpc/is_admin')) return r.fulfill({ json: true });
+    if (u.pathname.includes('/auth/')) return r.fulfill({ json: {} });
+    if (m === 'GET' && data[t]) return r.fulfill({ json: data[t] });
+    return r.fulfill({ json: m === 'GET' ? [] : null });
+  });
+  const out = process.argv[2] || '.';
+  let failed = 0;
+  const step = async (n, f) => { try { await f(); console.log('ok  ', n); } catch (e) { failed++; console.log('FAIL', n, '|', e.message.split('\n')[0]); } };
+  const has = async (...ts) => { const x = await p.textContent('#app'); for (const t of ts) if (!x.includes(t)) throw new Error('fehlt: ' + t); };
+  const closed = () => p.waitForSelector('#modal', { state: 'hidden' });
+
+  await p.goto('http://localhost:8765/#verwaltung');
+  await step('Bon', async () => { await p.waitForSelector('text=KASSENSTAND', { timeout: 8000 }); await has('Läuft in 14 Tagen ab (1)', 'Läuft in 30 Tagen ab (1)', 'Unter Einkaufspreis (1)', 'Hinweise', 'Nachbestellen', 'Bitte jetzt sichern', 'An Claude'); });
+  await p.screenshot({ path: out + '/a-bon.png', fullPage: true });
+  await step('Regal', async () => { await p.click('#nav >> text=Regal'); await has('Cola', 'Alt', 'Vorschlag liegt vor', 'Ampel'); });
+  await step('Regal: Foto-Vorschlag prüfen', async () => { await p.click('[data-a="a-job"]'); await has('Foto 7', 'Twix verdeckt'); const v = await p.inputValue('[data-cnt="p1"]'); if (v !== '7') throw new Error('Wert ' + v); await p.click('text=Zählung speichern'); await p.waitForSelector('[data-a="a-cnt"]'); });
+  await step('Regal: Produkt bearbeiten', async () => { await p.click('button.it:has-text("Cola")'); await p.fill('#f_price', '1,20'); await p.click('#mform button.pri'); await closed(); });
+  await step('Regal: Produkt löschen', async () => { await p.click('button.it:has-text("Alt")'); await p.selectOption('#f_active', 'del'); await p.click('#mform button.pri'); await p.waitForSelector('text=endgültig löschen?'); await p.click('#mform button.pri'); await closed(); });
+  await step('Einkauf', async () => { await p.click('#nav >> text=Einkauf'); await has('Einkauf per Foto oder Ansage', 'Vorschlag liegt vor', 'wartet auf Auswertung', 'Haltbarkeit'); });
+  await p.screenshot({ path: out + '/a-einkauf.png', fullPage: true });
+  await step('Einkauf: Vorschlag prüfen und speichern', async () => {
+    await p.click('[data-a="a-draft"]'); await has('Vorschlag prüfen', 'Preis Twix geschätzt');
+    if (await p.inputValue('#estore') !== 'Rewe') throw new Error('Laden');
+    if ((await p.$$('#cart .cart')).length !== 2) throw new Error('Zeilen');
+    if (await p.inputValue('#cart .cart:nth-child(1) input:nth-of-type(2)') !== '9,48') throw new Error('Preis');
+    await p.click('text=Einkauf speichern'); await p.waitForSelector('text=Einkauf von Hand');
+  });
+  await step('Einkauf ansagen', async () => { await p.click('text=Einkauf ansagen'); await p.fill('#f_t', 'Bei Rewe 12 Cola für 9,48'); await p.click('#mform button.pri'); await closed(); });
+  await step('Kasse', async () => { await p.click('#nav >> text=Kasse'); await has('Einnahmen und Ausgaben', 'Verkauf letzte 4 Wochen', 'Letzte Buchungen'); await p.click('.seg >> text=Woche'); await p.click('.seg >> text=Jahr'); await has('2025'); });
+  await step('Kasse: Kassensturz', async () => { await p.click('[data-a="a-cash"]'); await p.fill('#f_c', '18,20'); await p.click('#mform button.pri'); await closed(); });
+  await step('Leute', async () => { await p.click('#nav >> text=Leute'); await has('Muster', 'Rangliste Umsatz', 'QR-Code'); if (!(await p.$('.qr img'))) throw new Error('QR fehlt'); });
+  await step('Leute: Zahlung', async () => { await p.click('[data-a="a-pay"] >> nth=0'); await p.fill('#f_c', '2,50'); await p.click('#mform button.pri'); await closed(); });
+  await p.screenshot({ path: out + '/a-leute.png', fullPage: true });
+  console.log('Schreibzugriffe:'); calls.forEach(c => console.log('  ', c));
+  console.log('Fehler in der Konsole:', errs);
+  await b.close();
+  process.exit(failed || errs.length ? 1 : 0);
+})();

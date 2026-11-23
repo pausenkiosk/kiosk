@@ -159,7 +159,7 @@ const kActs = {
 };
 
 /* ---------------- Verwalter ---------------- */
-const A = { tab: 'bon', d: null, counting: false, span: 'month', job: null };
+const A = { tab: 'bon', d: null, counting: false, span: 'month', job: null, draft: null };
 const TABS = [['bon', 'Bon'], ['regal', 'Regal'], ['einkauf', 'Einkauf'], ['kasse', 'Kasse'], ['leute', 'Leute']];
 
 async function aBoot(session) {
@@ -203,10 +203,10 @@ async function aLoad() {
     Promise.resolve({ data: [] }),
     SB.from('settings').select('key,value'),
     SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
-    SB.from('photo_jobs').select('id,at,paths,status,result,note').neq('status', 'fertig').order('at', { ascending: false })
+    SB.from('photo_jobs').select('id,at,paths,status,result,note,kind,text').neq('status', 'fertig').order('at', { ascending: false })
   ]).then(a => a.map(ok));
   const set = Object.fromEntries(r[9].map(x => [x.key, x.value]));
-  A.d = { products: r[0], sales: r[1], journal: r[2], ledger: r[3], persons: r[4], mhd: r[5], alerts: r[6], cash: r[7], wishes: r[8], set, requests: r[10], jobs: r[11],
+  A.d = { products: r[0], sales: r[1], journal: r[2], ledger: r[3], persons: r[4], mhd: r[5], alerts: r[6], cash: r[7], wishes: r[8], set, requests: r[10], jobs: r[11].filter(j => j.kind !== 'einkauf'), drafts: r[11].filter(j => j.kind === 'einkauf'),
     rot: Number(set.rot || 1), gelb: Number(set.gelb || 2) };
   const now = Date.now(), d28 = now - 28 * 864e5;
   A.d.products.forEach(p => {
@@ -241,7 +241,9 @@ function vBon() {
   const act = d.products.filter(p => p.active);
   const list = (ps, f) => ps.map(p => `<div class="it"><i class="lamp ${p.lamp}"></i><span>${esc(p.name)}</span><span>${p.stock} St</span><span>${f(p)}</span></div>`).join('');
   const red = act.filter(p => p.lamp === 'r'), yel = act.filter(p => p.lamp === 'y');
-  const soon = d.mhd.filter(m => (pd(m.mhd) - t) / 864e5 < 14);
+  const left = m => Math.ceil((pd(m.mhd) - t) / 864e5);
+  const urgent = d.mhd.filter(m => left(m) < 14), soon = d.mhd.filter(m => left(m) >= 14 && left(m) <= 30);
+  const mrow = (m, c) => `<div class="it"><i class="lamp ${c}"></i><span>${esc(pname(m.product_id))}</span><span>${m.qty ? m.qty + ' St' : ''}</span><span>${dshort(m.mhd)} · ${left(m) < 0 ? 'abgelaufen' : left(m) + ' T'}</span></div>`;
   const cheap = act.filter(p => p.cost_cents && p.price_cents < p.cost_cents);
   const wk = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][t.getDay()];
   return `<div class="paper">${head(`${wk} ${t.toLocaleDateString('de-DE')} · KW ${isoWeek(t)[1]}`)}
@@ -253,7 +255,8 @@ function vBon() {
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
     <hr><h2>Nachbestellen (${red.length})</h2>${list(red, p => p.reachTxt) || '<p class="mut">Nichts.</p>'}
     ${yel.length ? `<hr><h2>Wird knapp (${yel.length})</h2>${list(yel, p => p.reachTxt)}` : ''}
-    ${soon.length ? `<hr><h2>Läuft ab (${soon.length})</h2>` + soon.map(m => `<div class="it"><i class="lamp ${pd(m.mhd) < t ? 'r' : 'y'}"></i><span>${esc(pname(m.product_id))}</span><span>${m.qty ? m.qty + ' St' : ''}</span><span>${dshort(m.mhd)}</span></div>`).join('') : ''}
+    ${urgent.length ? `<hr><h2 class="neg">Läuft in 14 Tagen ab (${urgent.length})</h2>` + urgent.map(m => mrow(m, 'r')).join('') : ''}
+    ${soon.length ? `<hr><h2>Läuft in 30 Tagen ab (${soon.length})</h2><p class="small mut">Zeit für einen Abverkaufspreis, falls noch viel da ist.</p>` + soon.map(m => mrow(m, 'y')).join('') : ''}
     ${cheap.length ? `<hr><h2>Unter Einkaufspreis (${cheap.length})</h2>` + cheap.map(p => `<div class="it"><i class="lamp y"></i><span>${esc(p.name)}</span><span>VK ${eur(p.price_cents)}</span><span>EK ${eur(p.cost_cents)}</span></div>`).join('') : ''}
     <hr>${ln('Im grünen Bereich', act.filter(p => p.lamp === 'g').length + ' Artikel')}
     ${act.length ? '' : '<p class="small mut">Noch kein Produkt ist aktiv. Trage unter Regal Preise ein und schalte Produkte frei.</p>'}
@@ -284,19 +287,25 @@ function vRegal() {
 }
 
 const prodOpts = () => A.d.products.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-const cartRow = () => `<div class="cart"><select aria-label="Produkt"><option value="">Produkt …</option>${prodOpts()}</select>
-  <input type="number" inputmode="numeric" min="1" placeholder="Stk" aria-label="Stück"><input inputmode="decimal" placeholder="€ ges." aria-label="Preis gesamt in Euro">
-  <input type="date" aria-label="Mindesthaltbarkeit"></div>`;
+const cartRow = (it = {}) => `<div class="cart"><select aria-label="Produkt"><option value="">Produkt …</option>${A.d.products.map(p => `<option value="${p.id}"${p.id === it.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+  <input type="number" inputmode="numeric" min="1" placeholder="Stk" aria-label="Stück" value="${it.qty || ''}"><input inputmode="decimal" placeholder="€ ges." aria-label="Preis gesamt in Euro" value="${it.cents != null ? eur(it.cents) : ''}">
+  <input type="date" aria-label="Mindesthaltbarkeit" value="${esc(it.mhd || '')}"></div>`;
 
 function vEinkauf() {
-  const d = A.d, t = new Date();
-  return `<div class="paper"><h2>Einkauf erfassen</h2>
-    <label for="eday">Datum</label><input id="eday" type="date" value="${iso(t)}">
-    <label for="estore">Laden</label><input id="estore" placeholder="z. B. Rewe" autocomplete="off">
+  const d = A.d, t = new Date(), dr = A.draft && A.draft.result ? A.draft.result : null;
+  return `<div class="paper"><h2>Einkauf per Foto oder Ansage</h2>
+    <p class="small mut">Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag, den du hier nur noch prüfst.</p>
+    <input type="file" id="bonfoto" accept="image/*" multiple hidden>
+    <div class="row"><button class="btn pri" data-a="a-bon">Bon oder Screenshot</button><button class="btn pri" data-a="a-say">Einkauf ansagen</button></div>
+    ${d.drafts.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>${dshort(j.at.slice(0, 10))} ${j.paths.length ? j.paths.length + ' Foto' + (j.paths.length === 1 ? '' : 's') : 'Ansage'}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-draft" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-draftdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
+    <div class="paper"><h2>${dr ? 'Vorschlag prüfen' : 'Einkauf von Hand'}</h2>
+    ${dr ? `<p class="small">Bitte Produkte, Stückzahlen und Preise prüfen und das Haltbarkeitsdatum ergänzen.${A.draft.note ? ' Hinweis von Claude: ' + esc(A.draft.note) : ''}</p>` : ''}
+    <label for="eday">Datum</label><input id="eday" type="date" value="${esc(dr && dr.day ? dr.day : iso(t))}">
+    <label for="estore">Laden</label><input id="estore" placeholder="z. B. Rewe" autocomplete="off" value="${esc(dr && dr.store ? dr.store : '')}">
     <p class="small mut">Je Zeile: Produkt, Stückzahl, Gesamtpreis, darunter das Haltbarkeitsdatum (optional).</p>
-    <div id="cart">${cartRow()}${cartRow()}</div>
+    <div id="cart">${dr && dr.items && dr.items.length ? dr.items.map(cartRow).join('') : cartRow() + cartRow()}</div>
     <div class="row"><button class="btn" data-a="a-cart">Zeile dazu</button><button class="btn pri" data-a="a-buy">Einkauf speichern</button></div></div>
-    <div class="paper"><h2>Haltbarkeit</h2>${d.mhd.length ? d.mhd.map(m => { const days = Math.ceil((pd(m.mhd) - t) / 864e5); return `<div class="it"><i class="lamp ${days < 0 ? 'r' : days < 14 ? 'y' : 'g'}"></i><span>${esc(pname(m.product_id))}${m.qty ? ' · ' + m.qty + ' St' : ''}</span><span>${dshort(m.mhd)} (${days < 0 ? 'abgelaufen' : days + ' T'})</span>
+    <div class="paper"><h2>Haltbarkeit</h2>${d.mhd.length ? d.mhd.map(m => { const days = Math.ceil((pd(m.mhd) - t) / 864e5); return `<div class="it"><i class="lamp ${days < 14 ? 'r' : days <= 30 ? 'y' : 'g'}"></i><span>${esc(pname(m.product_id))}${m.qty ? ' · ' + m.qty + ' St' : ''}</span><span>${dshort(m.mhd)} (${days < 0 ? 'abgelaufen' : days + ' T'})</span>
       <span><button class="btn sm" data-a="a-mhd" data-id="${m.id}" data-p="${m.product_id}" data-q="${m.qty}">…</button></span></div>`; }).join('') : '<p class="mut">Keine offenen Haltbarkeitsdaten.</p>'}</div>`;
 }
 
@@ -363,7 +372,7 @@ function vLeute() {
 
 const reload = async () => { await aLoad(); aRender(); };
 const aActs = {
-  'a-tab': el => { A.tab = el.dataset.t; A.counting = false; A.job = null; aRender(); },
+  'a-tab': el => { A.tab = el.dataset.t; A.counting = false; A.job = null; A.draft = null; aRender(); },
   'a-req': async () => {
     const v = await ask('Nachricht an Claude', [{ k: 't', label: 'Was soll besser werden oder erledigt werden?', type: 'area' }], 'Abschicken');
     if (!v || !v.t.trim()) return;
@@ -432,6 +441,14 @@ const aActs = {
     if (!(r > 0 && g > r)) return toast('Gelb muss größer als Rot sein.');
     ok(await SB.from('settings').upsert([{ key: 'rot', value: String(r) }, { key: 'gelb', value: String(g) }])); await reload();
   },
+  'a-bon': () => { $('#bonfoto').click(); },
+  'a-say': async () => {
+    const v = await ask('Einkauf ansagen', [{ k: 't', label: 'Was hast du wo gekauft? Zum Beispiel: „Heute bei Rewe 12 Cola für 9,48, 6 Twix für 3,90, haltbar bis April.“ Diktieren geht über das Mikrofon der Tastatur.', type: 'area' }], 'Abschicken');
+    if (!v || !v.t.trim()) return;
+    ok(await SB.from('photo_jobs').insert({ paths: [], kind: 'einkauf', text: v.t.trim().slice(0, 2000) })); toast('Gespeichert. Der Vorschlag erscheint hier nach der Auswertung.'); await reload();
+  },
+  'a-draft': el => { A.draft = A.d.drafts.find(j => j.id === el.dataset.id); aRender(); },
+  'a-draftdel': async el => { const j = A.d.drafts.find(x => x.id === el.dataset.id); if (j.paths.length) await SB.storage.from('fotos').remove(j.paths); ok(await SB.from('photo_jobs').delete().eq('id', j.id)); await reload(); },
   'a-cart': () => { $('#cart').insertAdjacentHTML('beforeend', cartRow()); },
   'a-buy': async () => {
     const items = [];
@@ -444,6 +461,7 @@ const aActs = {
     }
     if (!items.length) return toast('Mindestens ein Produkt auswählen.');
     await rpc('a_purchase', { p_day: $('#eday').value, p_store: $('#estore').value.trim(), p_items: items });
+    if (A.draft) { if (A.draft.paths.length) await SB.storage.from('fotos').remove(A.draft.paths); ok(await SB.from('photo_jobs').update({ status: 'fertig', paths: [] }).eq('id', A.draft.id)); A.draft = null; }
     toast('Einkauf gespeichert.'); await reload();
   },
   'a-mhd': async el => {
@@ -546,7 +564,8 @@ async function shrink(file) {
   return new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
 }
 document.addEventListener('change', async e => {
-  if (e.target.id !== 'foto' || !e.target.files.length) return;
+  if (!['foto', 'bonfoto'].includes(e.target.id) || !e.target.files.length) return;
+  const kind = e.target.id === 'bonfoto' ? 'einkauf' : 'foto';
   try {
     toast('Fotos werden hochgeladen …');
     const paths = [];
@@ -554,11 +573,11 @@ document.addEventListener('change', async e => {
     if (e.target.files.length > 60) toast('Es werden die ersten 60 Fotos hochgeladen.');
     for (const f of files) {
       toast(`Foto ${paths.length + 1} von ${files.length} wird hochgeladen …`);
-      const path = `regal/${crypto.randomUUID()}.jpg`;
+      const path = `${kind}/${crypto.randomUUID()}.jpg`;
       ok(await SB.storage.from('fotos').upload(path, await shrink(f), { contentType: 'image/jpeg' }));
       paths.push(path);
     }
-    ok(await SB.from('photo_jobs').insert({ paths }));
+    ok(await SB.from('photo_jobs').insert({ paths, kind }));
     toast(`${paths.length} Foto${paths.length === 1 ? '' : 's'} gespeichert. Der Vorschlag erscheint hier nach der Auswertung.`);
     await reload();
   } catch (err) { console.error(err); toast('Hochladen hat nicht geklappt: ' + (err.message || 'Fehler')); }
