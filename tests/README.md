@@ -35,7 +35,9 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein – in der F
 | `kollege.test.js` | QR-Link, Anmeldung, falsche PIN, Sperre nach 3 Versuchen, Einwilligung, Anschreiben, Rückgängig, PIN ändern |
 | `verwalter.test.js` | Anmeldung, Bon, Nachricht an Claude, Regal (inkl. Produkt löschen), Fotos (bis 60), Einkauf von Hand / per Ansage / per Bon-Foto, Haltbarkeit (auch ohne Einkauf), Kasse, Leute, QR-Code, Sicherung, Konto ohne Rechte |
 | `kasse.test.js` | Kassensturz nach Kasseninhalt (mit/ohne Zahlungen, mehrere Tage, Kasse kleiner als Zahlungen), Storno (Handbuchung, Kassensturz, Einkauf) |
-| `uebergang.test.js` | (nur auf Wunsch) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
+| `guthaben.test.js` | Guthaben aufladen, vom Guthaben anschreiben, Rückgängig, zweite Aufladung, Anzeige bei Verwalter und Kollege, Kassenbuch, Kassensturz, Abschottung zwischen Kollegen |
+| `wunsch.test.js` | Wunsch abgeben (Kollege), Zusammenzählen gleicher Wünsche, Grenzen, Liste und „Erledigt“ beim Verwalter |
+| `uebergang.test.js` | (nur auf Wunsch, für den Wechsel von v14 auf Ausbaustufe 3) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
 | `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
 | `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |
 

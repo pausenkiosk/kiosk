@@ -26,8 +26,8 @@ module.exports = async function kasse(browser) {
   const pay = async (name, amount) => {
     await tab('leute'); await hideToast(page);
     await prow(page, name).locator('[data-a="a-pay"]').click();
-    await fillModal(page, 'Zahlung von ' + name, { c: amount });
-    await toast(page, /Zahlung gebucht\./);
+    await fillModal(page, 'Einzahlung von ' + name, { c: amount });
+    await toast(page, /^Gebucht\. /);
     await idle(page);
   };
   /* Kassensturz über die Oberfläche; liefert den angezeigten Hinweis */
