@@ -798,8 +798,9 @@ module.exports = async function verwalter(browser) {
   await S('Leute: Zahlung buchen gleicht den Schuldschein aus und landet in der Kasse', async () => {
     await hideToast(page);
     await prow(page, 'Emil').locator('[data-a="a-pay"]').click();
-    await fillModal(page, 'Zahlung von Emil', { c: '4,50' });
-    await toast(page, /Zahlung gebucht\./);
+    await see(page, 'Offen: 4,50 €. Alles darüber wird Guthaben.', '#modal');
+    await fillModal(page, 'Einzahlung von Emil', { c: '4,50' });
+    await toast(page, /^Gebucht\. Schuldschein ist ausgeglichen\.$/);
     await rowHas(page, 'Emil', /0,00/);
     eq(await saldo('Emil'), 0, 'Schuldschein Emil');
     const j = await db('journal', 'day,in_cents', 'text', 'Zahlung Schuldschein');
@@ -807,13 +808,15 @@ module.exports = async function verwalter(browser) {
   });
   await S('Leute: Zahlung ohne Betrag bucht nichts', async () => {
     await prow(page, 'Gerd').locator('[data-a="a-pay"]').click();
-    await fillModal(page, 'Zahlung von Gerd', { c: '' });
+    await fillModal(page, 'Einzahlung von Gerd', { c: '' });
     await idle(page);
     eq(await saldo('Gerd'), 300, 'Schuldschein Gerd');
   });
   await S('Leute: Teilzahlung lässt einen Rest stehen', async () => {
     await prow(page, 'Gerd').locator('[data-a="a-pay"]').click();
-    await fillModal(page, 'Zahlung von Gerd', { c: '1' });
+    await hideToast(page);
+    await fillModal(page, 'Einzahlung von Gerd', { c: '1' });
+    await toast(page, /^Gebucht\. Noch offen: 2,00 €\.$/);
     await rowHas(page, 'Gerd', /2,00/);
   });
   const more = async (name, a, x) => {

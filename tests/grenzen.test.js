@@ -4,7 +4,13 @@
    Läuft als letzter Teil, weil er viele Testbuchungen anlegt. */
 const { CFG, step, setGroup, expect, eq, newPage, lnValue, see, prow } = require('./lib');
 
-const toCents = s => Math.round(Number(s.replace(/\./g, '').replace(',', '.').replace('−', '-')) * 100);
+const toCents = s => (/Guthaben/.test(s) ? -1 : 1) * Math.round(Number(s.replace('Guthaben', '').trim().replace(/\./g, '').replace(',', '.').replace('−', '-')) * 100);
+/* Offene Schuldscheine minus Guthaben der Kollegen (die Guthaben-Zeile fehlt, wenn niemand Guthaben hat). */
+const netto = async page => {
+  const offen = toCents(await lnValue(page, 'Offene Schuldscheine'));
+  const g = page.locator('#app .ln', { hasText: 'Guthaben der Kollegen' });
+  return offen - (await g.count() ? toCents((await g.first().locator('span').nth(1).innerText()).trim()) : 0);
+};
 
 module.exports = async function grenzen(browser) {
   setGroup('Viele Buchungen');
@@ -19,7 +25,7 @@ module.exports = async function grenzen(browser) {
     await page.fill('#em', CFG.email); await page.fill('#pw', CFG.pw);
     await page.locator('#alog button.pri').click();
     await see(page, 'KASSENSTAND');
-    before = { stand: toCents(await lnValue(page, 'KASSENSTAND')), offen: toCents(await lnValue(page, 'Offene Schuldscheine')) };
+    before = { stand: toCents(await lnValue(page, 'KASSENSTAND')), offen: await netto(page) };
     const r = await page.evaluate(async n => {
       const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date());
       const gerd = (await SB.from('persons').select('id').eq('vorname', 'Gerd')).data[0].id;
@@ -41,9 +47,9 @@ module.exports = async function grenzen(browser) {
     expect(before, 'Vorbereitung fehlgeschlagen');
     eq(toCents(await lnValue(page, 'KASSENSTAND')), before.stand + N, 'Kassenstand in Cent nach 1200 Buchungen zu je 0,01 €');
   });
-  await S('Offene Schuldscheine zählen alle Buchungen mit (auch über 1000)', async () => {
+  await S('Offene Schuldscheine und Guthaben zählen alle Buchungen mit (auch über 1000)', async () => {
     expect(before, 'Vorbereitung fehlgeschlagen');
-    eq(toCents(await lnValue(page, 'Offene Schuldscheine')), before.offen + N, 'Offene Schuldscheine in Cent nach 1200 Buchungen zu je 0,01 €');
+    eq(await netto(page), before.offen + N, 'Offene Schuldscheine minus Guthaben in Cent nach 1200 Buchungen zu je 0,01 €');
   });
   await S('Schuldschein einer Person stimmt bei über 1000 Buchungen', async () => {
     expect(before, 'Vorbereitung fehlgeschlagen');

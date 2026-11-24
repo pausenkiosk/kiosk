@@ -149,8 +149,13 @@ async function anonApi() {
 async function sql(query) {
   const ctx = await request.newContext({ proxy });
   try {
-    const r = await ctx.post(`https://api.supabase.com/v1/projects/${CFG.ref}/database/query`, {
-      headers: { Authorization: 'Bearer ' + (process.env.SUPABASE_ACCESS_TOKEN || 'proxy-injected'), 'Content-Type': 'application/json' }, data: { query } });
+    let r;
+    for (let i = 0; i < 4; i++) {   // die Verwaltungs-API antwortet vereinzelt mit 502/503: kurz warten und wiederholen
+      r = await ctx.post(`https://api.supabase.com/v1/projects/${CFG.ref}/database/query`, {
+        headers: { Authorization: 'Bearer ' + (process.env.SUPABASE_ACCESS_TOKEN || 'proxy-injected'), 'Content-Type': 'application/json' }, data: { query } });
+      if (r.status() < 500) break;
+      await new Promise(f => setTimeout(f, 3000));
+    }
     if (!r.ok()) throw new Error(`SQL fehlgeschlagen (${r.status()}): ${(await r.text()).slice(0, 300)}`);
     return r.json();
   } finally { await ctx.dispose(); }

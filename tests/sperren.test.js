@@ -24,7 +24,7 @@ const ADMIN_FNS = {
 /* Interne Helfer und abgeschaltete Funktionen, die ebenfalls nicht offen sein dürfen. */
 const OTHER_FNS = {
   is_admin: {}, today: {}, k_code_ok: { p_code: 'x' }, k_person: { p_token: 'x' }, k_cleanup: {},
-  k_wish: { p_token: 'x', p_text: 'Test' }, k_vote: { p_token: 'x', p_wish: NIL }
+  k_vote: { p_token: 'x', p_wish: NIL }
 };
 const INSERTS = {
   settings: { key: 'eindringling', value: '1' },
@@ -91,6 +91,8 @@ module.exports = async function sperren() {
     expect(b && b.ok === false && b.err === 'sitzung', `k_buy mit erfundener Sitzung: ${JSON.stringify(b)}`);
     const pin = await api.post('/rest/v1/rpc/k_pin', { data: { p_token: 'erfunden', p_old: '1111', p_new: '2222' } });
     expect((await pin.json()) === false, `k_pin mit erfundener Sitzung: ${await body(pin)}`);
+    const wish = await api.post('/rest/v1/rpc/k_wish', { data: { p_token: 'erfunden', p_text: 'Eindringling-Wunsch' } });
+    expect(wish.status() < 300, `k_wish ist für Kollegen freigegeben, Status ${wish.status()} ${await body(wish)}`);   // ob wirklich nichts angelegt wurde, prüft der Teil „wunsch“
     const login = await api.post('/rest/v1/rpc/k_login', { data: { p_code: 'falsch', p_person: NIL, p_pin: '1111' } });
     const l = await login.json();
     expect(l && l.ok === false && l.err === 'code', `k_login mit falschem Kiosk-Code: ${JSON.stringify(l)}`);
