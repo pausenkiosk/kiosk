@@ -723,8 +723,9 @@ language plpgsql security definer set search_path = public as $$
 declare topic text := (select value from settings where key = 'ntfy_topic');
 begin
   if topic is null or topic = '' then return; end if;
-  perform net.http_post(url := 'https://ntfy.sh/' || topic,
-    body := to_jsonb(p_body), headers := jsonb_build_object('Title', p_title, 'Tags', 'package', 'Content-Type', 'text/plain'));
+  -- JSON-Schnittstelle von ntfy (pg_net sendet nur application/json)
+  perform net.http_post(url := 'https://ntfy.sh/',
+    body := jsonb_build_object('topic', topic, 'title', p_title, 'message', p_body, 'tags', jsonb_build_array('package')));
 exception when others then
   insert into alerts(text) values ('Benachrichtigung konnte nicht gesendet werden: ' || p_title);
 end $$;
