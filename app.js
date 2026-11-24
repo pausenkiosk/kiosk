@@ -410,9 +410,10 @@ function vBon() {
   const cheap = act.filter(p => p.cost_cents && p.price_cents < p.cost_cents);
   const wk = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][t.getDay()];
   return `<div class="paper">${head(`${wk} ${t.toLocaleDateString('de-DE')} · KW ${isoWeek(t)[1]}`)}
+    ${ln('Einnahmen gesamt', eur(sum(() => true, 'in_cents')))}
+    ${ln('Ausgaben gesamt', '−' + eur(sum(() => true, 'out_cents')))}
     ${ln('KASSENSTAND ' + ii('kasse'), eur(stand), 'big' + (stand < 0 ? ' neg' : ''))}
-    ${ln('Einnahmen Monat', eur(sum(j => j.day.startsWith(ym), 'in_cents')))}
-    ${ln('Ausgaben Monat', eur(sum(j => j.day.startsWith(ym), 'out_cents')))}
+    <p class="small mut">Seit Beginn des Kiosks. Monate, Wochen und einzelne Buchungen unter Kasse.</p>
     ${ln('Offene Schuldscheine', eur(offen))}
     ${guthaben ? ln('Guthaben der Kollegen', eur(guthaben)) : ''}
     ${ln('Abgleich Ware/Kasse ' + ii('fehl'), fehl)}
