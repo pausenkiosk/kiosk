@@ -130,8 +130,6 @@ body.hascart{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
 .express-off{border:1.5px dashed var(--dash);border-radius:8px;padding:8px 10px;margin:8px 0 12px}
 .express-cta .btn{background:#e3f3e8;border-color:var(--grn);color:#14532d;font-weight:700}
 .express-cta .btn::before{content:"● ";color:var(--grn)}
-.express-off{background:#fbe6e3;border:1.5px solid var(--red)!important;border-style:solid!important;color:#7a1b12}
-.express-off::before{content:"● ";color:var(--red)}
 .express-sw{border-radius:8px;padding:8px!important;margin:2px 0}
 .express-sw.on{background:#e3f3e8}
 .express-sw.off{background:#fbe6e3}
