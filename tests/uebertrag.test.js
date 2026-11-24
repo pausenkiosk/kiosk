@@ -45,8 +45,8 @@ module.exports = async function uebertrag(browser) {
   await S('Dialog „…“: Auswahl Schulden/Guthaben übertragen statt „korrigieren (+ / −)“, Hinweis zur Kasse', async () => {
     await prow(page, 'Wanda').locator('[data-a="a-more"]').click();
     const m = page.locator('#modal:not([hidden])');
-    eq((await m.locator('#f_a option').evaluateAll(os => os.map(o => o.value))).join(','), 'schuld,guthaben,pin,del', 'Aktionen');
-    eq((await m.locator('#f_a option').allInnerTexts()).slice(0, 2).join(' | '), 'Schulden übertragen (z. B. vom Papier-Schuldschein) | Guthaben übertragen (schon früher bezahlt)', 'Beschriftung');
+    eq((await m.locator('#f_a option').evaluateAll(os => os.map(o => o.value).filter(Boolean))).join(','), 'schuld,guthaben,pin,del', 'Aktionen');
+    eq((await m.locator('#f_a option').allInnerTexts()).filter(t => !t.startsWith('Bitte wählen')).slice(0, 2).join(' | '), 'Schulden übertragen (z. B. vom Papier-Schuldschein) | Guthaben übertragen (schon früher bezahlt)', 'Beschriftung');
     await see(page, 'Übertragen ändert nur den Schuldschein, nicht die Kasse. Gibt dir jemand jetzt Geld, nimm stattdessen „Einzahlung“.', '#modal');
     await see(page, 'Betrag in € (ohne Vorzeichen) bzw. neue PIN', '#modal');
     await m.locator('[data-a="m-x"]').click(); await idle(page);
@@ -95,9 +95,11 @@ module.exports = async function uebertrag(browser) {
     if (await kq.count()) await kq.fill(name);
     await kp.locator('#app .namegrid button', { hasText: new RegExp('^' + name + '$') }).click();
     await kp.fill('#pin', pin); await kp.locator('#kpin button.pri').click();
-    await kp.locator('[data-a="k-consent"]').click();
+    await kp.waitForFunction(() => /Kurz vorab|Schuldschein von/.test(document.querySelector('#app').textContent));
+    if (await kp.locator('[data-a="k-consent"]').count()) await kp.locator('[data-a="k-consent"]').click();
     await see(kp, 'Schuldschein von ' + name);
   };
+  const kLogin2 = name => kLogin(name, name === 'Willi' ? '4242' : '4141');
   await K('Kollegin mit übertragenen Schulden sieht „Übertrag Schulden“ und den offenen Betrag', async () => {
     await kLogin('Wanda', '4141');
     await lnIs(kp, 'OFFEN', '13,50 €');
@@ -122,6 +124,50 @@ module.exports = async function uebertrag(browser) {
     const after = await saldo('Wanda');
     if (after !== before) await rpc('a_fix', { p_person: ids.Wanda, p_cents: before - after });   // Testdaten wieder geradeziehen
     eq(after, before, `Saldo Wanda in Cent (Hinweis der App: „${hint}“)`);
+  });
+  await S('Dialog „…“ startet ohne Vorauswahl; ohne Auswahl wird nichts ausgeführt (ab v26)', async () => {
+    await idle(page); await hideToast(page);
+    await prow(page, 'Wanda').locator('[data-a="a-more"]').click();
+    const m = page.locator('#modal:not([hidden])');
+    eq(await m.locator('#f_a').inputValue(), '', 'vorausgewählte Aktion');
+    eq((await m.locator('#f_a option').first().innerText()).trim(), 'Bitte wählen …', 'erster Eintrag der Auswahl');
+    await m.locator('[data-a="m-x"]').click(); await idle(page);
+    const before = await saldo('Wanda');
+    for (const x of ['4711', '7,50', '']) eq(await mehr('Wanda', null, x), 'Bitte zuerst eine Aktion wählen.', `Hinweis bei „${x}“ ohne Auswahl`);
+    eq(await saldo('Wanda'), before, 'Saldo Wanda');
+  });
+  await S('Übertrag ab 100,00 € fragt nach; Abbrechen bucht nichts, Bestätigen bucht (ab v26)', async () => {
+    const before = await saldo('Wanda');
+    const hoch = async (aktion, betrag, bestaetigen) => {
+      await idle(page); await hideToast(page);
+      await prow(page, 'Wanda').locator('[data-a="a-more"]').click();
+      await fillModal(page, 'Wanda', { a: aktion, x: betrag });
+      const m = page.locator('#modal:not([hidden])');
+      await m.locator('h2', { hasText: 'für Wanda?' }).waitFor();
+      const txt = (await m.innerText()).replace(/\s+/g, ' ');
+      await m.locator(bestaetigen ? 'button.pri' : '[data-a="m-x"]').click();
+      await idle(page);
+      return txt;
+    };
+    const dlg = await hoch('schuld', '100', false);
+    expect(/100,00 € Schulden für Wanda\?/i.test(dlg) && dlg.includes('ungewöhnlich hoher Betrag'), 'Rückfrage: ' + dlg);
+    eq(await saldo('Wanda'), before, 'Saldo nach Abbrechen');
+    await hoch('guthaben', '250,00', false);
+    eq(await saldo('Wanda'), before, 'Saldo nach Abbrechen (Guthaben)');
+    eq(await mehr('Wanda', 'schuld', '99,99'), '99,99 € Schulden für Wanda eingetragen.', 'Hinweis knapp unter der Grenze (ohne Rückfrage)');
+    await hoch('guthaben', '100', true);
+    eq(await saldo('Wanda'), before + 9999 - 10000, 'Saldo nach 99,99 Schulden und bestätigten 100,00 Guthaben');
+    await rpc('a_fix', { p_person: ids.Wanda, p_cents: 1 });   // wieder auf den Stand davor
+  });
+  await K('Deine Buchungen: Beträge ohne Vorzeichen, Gutschriften grün, Schulden-Buchungen nicht (ab v26)', async () => {
+    await kLogin2('Willi');
+    const rows = await kp.locator('#app .paper', { hasText: 'Deine Buchungen' }).locator('.it').evaluateAll(rs => rs.map(r => {
+      const el = r.children[3]; const [R, G, B] = getComputedStyle(el).color.match(/\d+/g).map(Number);
+      return { art: r.children[1].textContent.replace(/^\d\d\.\d\d\. /, '').trim(), betrag: el.textContent.trim(), gruen: G > R + 25 && G > B + 15 };
+    }));
+    expect(rows.length >= 2, 'Buchungen: ' + JSON.stringify(rows));
+    const bad = rows.filter(r => /[−+-]/.test(r.betrag) || r.gruen !== /Guthaben|Einzahlung/.test(r.art));
+    expect(bad.length === 0, 'Unpassend: ' + JSON.stringify(bad));
   });
   await S('Keine Fehler in der Browser-Konsole (Übertrag)', async () => {
     const real = [...page.problems, ...kp.problems].filter(p => !/favicon/i.test(p));
