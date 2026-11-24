@@ -88,6 +88,16 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
     await p.click('button.it:has-text("Cola")'); await p.click('[data-q="x"]'); await p.waitForSelector('#modal', { state: 'hidden' });
     if (buys.length !== n + 1) throw new Error('Abbrechen hat gebucht');
   });
+  await run('Kachel-Ansicht: umschalten, merken, anschreiben', 5, { kcode: 'c', ktoken: 'tok' }, async p => {
+    await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Deine Buchungen');
+    await p.click('[data-a="k-view"][data-v="kacheln"]'); await p.waitForSelector('.tile');
+    if (await p.$('.tile:has-text("Fanta")')) throw new Error('leeres Produkt als Kachel');
+    if (!(await p.$('.tile svg'))) throw new Error('kein Bild');
+    await p.reload(); await p.waitForSelector('.tile');
+    await p.click('.tile:has-text("Cola")'); await p.waitForSelector('.qty'); await p.click('[data-q="ok"]'); await p.waitForSelector('#modal', { state: 'hidden' });
+    await p.click('[data-a="k-view"][data-v="liste"]'); await p.waitForSelector('button.it:has-text("Cola")');
+    if (await p.evaluate(() => localStorage.getItem('kview')) !== 'liste') throw new Error('Ansicht nicht gemerkt');
+  });
   await b.close();
   process.exit(failed ? 1 : 0);
 })();

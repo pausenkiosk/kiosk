@@ -60,7 +60,7 @@ function ask(title, fields, okLabel = 'Speichern', intro = '') {
 }
 
 /* ---------------- Kollegen ---------------- */
-const K = { code: null, token: null, names: null, sel: null, st: null, all: false, q: '' };
+const K = { code: null, token: null, names: null, sel: null, st: null, all: false, q: '', view: LS.get('kview') === 'kacheln' ? 'kacheln' : 'liste' };
 const favGet = () => { try { const f = JSON.parse(LS.get('kfav') || 'null'); return f && f.id ? f : null; } catch { return null; } };
 
 const CONSENT_SHORT = 'Mit dem Schuldschein schreibst du im Kiosk an, statt Kleingeld zu suchen, und siehst jederzeit, was noch offen ist. ' +
@@ -136,13 +136,18 @@ function kRender() {
   }
   const cats = {};
   s.products.filter(p => p.stock > 0).forEach(p => { (cats[p.cat] = cats[p.cat] || []).push(p); });
-  const prod = Object.keys(cats).map(c => `<h2>${esc(c)}</h2>` + cats[c].map(p =>
+  const tile = p => `<button class="tile" data-a="k-buy" data-id="${p.id}">${productIcon(p)}<span class="tn">${esc(p.name)}</span>` +
+    `<span class="tp">${p.sale ? `<s>${eur(p.normal)}</s> <b class="neg">${eur(p.cents)} €</b>` : eur(p.cents) + ' €'}</span><span class="ts">${p.stock} St</span></button>`;
+  const prod = K.view === 'kacheln' ? Object.keys(cats).map(c => `<h2>${esc(c)}</h2><div class="tiles">${cats[c].map(tile).join('')}</div>`).join('') :
+    Object.keys(cats).map(c => `<h2>${esc(c)}</h2>` + cats[c].map(p =>
     `<button class="it" data-a="k-buy" data-id="${p.id}"><i class="lamp ${p.stock > 0 ? 'g' : 'o'}"></i><span>${esc(p.name)}${p.sale ? ' <b class="neg">Abverkauf</b>' : ''}</span>` +
     `<span class="mut">${p.stock > 0 ? p.stock + ' St' : 'aus'}</span><span>${p.sale ? `<s>${eur(p.normal)}</s> ` : ''}${eur(p.cents)} €</span></button>`).join('')).join('');
   app.innerHTML = `<div class="paper">${head('Schuldschein von ' + esc(s.vorname))}
       ${ln((s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN') + ' ' + ii('k_saldo'), `<span class="${s.saldo > 0 ? 'neg' : s.saldo < 0 ? 'pos' : ''}">${s.saldo > 0 ? '−' : ''}${eur(Math.abs(s.saldo))} €</span>`, 'big')}
       <p class="small mut">${s.saldo < 0 ? 'Einkäufe werden von deinem Guthaben abgezogen. Ist es aufgebraucht, schreibst du wie gewohnt an.' : 'Bezahlen oder Guthaben aufladen: Betrag dem Betreiber geben, er trägt ihn ein.'}</p></div>
-    <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Gerade ist nichts im Regal eingetragen.</p>'}</div>
+    <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2>
+      <div class="seg viewsw" role="group" aria-label="Ansicht">${[['liste', 'Liste'], ['kacheln', 'Kacheln']].map(([v, l]) => `<button type="button" data-a="k-view" data-v="${v}" class="${K.view === v ? 'on' : ''}" aria-pressed="${K.view === v}">${l}</button>`).join('')}</div>
+      <p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Gerade ist nichts im Regal eingetragen.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen ${ii('k_entries')}</h2>${s.entries.length ? s.entries.map(e =>
       `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? (e.cents > 0 ? 'Übertrag Schulden' : 'Übertrag Guthaben') : 'Kauf'}</span>` +
       `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span class="${e.cents < 0 ? 'pos' : ''}">${eur(Math.abs(e.cents))}</span></div>`).join('')
@@ -171,6 +176,7 @@ const kReload = async () => { K.st = await rpc('k_state', { p_token: K.token });
 const kActs = {
   'k-sel': el => { K.sel = { id: el.dataset.id, n: el.dataset.n }; kRender(); },
   'k-back': () => { K.sel = null; kRender(); },
+  'k-view': el => { K.view = el.dataset.v; LS.set('kview', K.view); kRender(); },
   'k-all': () => { K.all = true; K.q = ''; kRender(); },
   'k-fav': () => { K.all = false; kRender(); },
   'k-forget': () => { LS.del('kfav'); toast('Dein Handy hat deinen Namen vergessen.'); kRender(); },
