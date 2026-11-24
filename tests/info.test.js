@@ -21,7 +21,8 @@ module.exports = async function info(browser) {
     await idle(p);
     const keys = await p.locator('#app .ii').evaluateAll(bs => bs.filter(b => b.offsetParent !== null).map(b => b.dataset.k));
     eq(keys.join(','), expected.join(','), 'Info-Knöpfe dieser Ansicht');
-    const n = keys.length;
+    const n = keys.length, bad = [];
+    const expect = (c, m) => { if (!c) bad.push(m); };   // erst alle Knöpfe prüfen, dann gesammelt melden
     for (let i = 0; i < n; i++) {
       const b = p.locator('#app .ii').nth(i);
       await b.scrollIntoViewIfNeeded();
@@ -48,6 +49,7 @@ module.exports = async function info(browser) {
       await p.waitForFunction(() => document.querySelector('#modal').hidden);
       seen.add(m.k);
     }
+    if (bad.length) throw new Error(bad.join(' · '));
     return keys;
   }
 
@@ -90,11 +92,9 @@ module.exports = async function info(browser) {
     await check(page, ['zaehlen']);
     await page.locator('#app [data-a="a-cnt-x"]').click();
   });
-  await S('Einkauf, Kasse, Leute: Info-Knöpfe an allen Abschnitten', async () => {
-    await tab('einkauf'); await check(page, ['einkauf', 'mhd']);
-    await tab('kasse'); await check(page, ['kassensturz', 'storno']);
-    await tab('leute'); await check(page, ['schuldscheine', 'rangliste', 'qr']);
-  });
+  await S('Einkauf: Info-Knöpfe an Einkauf und Haltbarkeit', async () => { await tab('einkauf'); await check(page, ['einkauf', 'mhd']); });
+  await S('Kasse: Info-Knöpfe an Einnahmen/Ausgaben (Kassensturz) und Letzte Buchungen (Storno)', async () => { await tab('kasse'); await check(page, ['kassensturz', 'storno']); });
+  await S('Leute: Info-Knöpfe an Schuldscheine, Rangliste, QR-Code', async () => { await tab('leute'); await check(page, ['schuldscheine', 'rangliste', 'qr']); });
   await S('Jeder hinterlegte Info-Text wird irgendwo angeboten', async () => {
     const all = await page.evaluate(() => Object.keys(INFO));
     const missing = all.filter(k => !seen.has(k));
@@ -102,12 +102,12 @@ module.exports = async function info(browser) {
     eq(all.length, 19, 'Anzahl Info-Texte');
   });
   await S('Info-Knöpfe erscheinen nicht im Druck (Aushang und Preisliste)', async () => {
+    await tab('leute');
     await page.emulateMedia({ media: 'print' });
     try {
-      await tab('leute').catch(() => {});
       let vis = await page.locator('.ii').evaluateAll(bs => bs.filter(b => getComputedStyle(b).display !== 'none' && b.offsetParent !== null).length);
       eq(vis, 0, 'sichtbare Info-Knöpfe im Aushang');
-      expect(!/(^|\s)i(\s|$)/.test((await page.locator('#app .poster').innerText()).split('\n')[0] || ''), 'einzelnes „i“ im Aushang');
+      expect(!/(^|\n)\s*i\s*(\n|$)/.test(await page.locator('#app .poster').innerText()), 'einzelnes „i“ im Aushang');
       await page.emulateMedia({ media: 'screen' }); await tab('regal'); await page.emulateMedia({ media: 'print' });
       vis = await page.locator('.ii').evaluateAll(bs => bs.filter(b => getComputedStyle(b).display !== 'none' && b.offsetParent !== null).length);
       eq(vis, 0, 'sichtbare Info-Knöpfe in der Preisliste');

@@ -1016,6 +1016,7 @@ module.exports = async function verwalter(browser) {
     await hideToast(page);
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), act('a-backup')]);
     eq(dl.suggestedFilename(), `kiosk-sicherung-${isoDay()}.json`, 'Dateiname');
+    await toast(page, /Sicherung erstellt\./);
     const txt = require('fs').readFileSync(await dl.path(), 'utf8');
     const data = JSON.parse(txt);
     const want = ['products', 'sales', 'ledger', 'journal', 'purchases', 'purchase_items', 'counts', 'cash_counts', 'alerts', 'requests', 'persons', 'settings', 'erstellt'];
@@ -1027,7 +1028,6 @@ module.exports = async function verwalter(browser) {
     const codeNow = await setting('kiosk_code');
     expect(!/pin_hash|setup_code/.test(txt) && !data.settings.some(x => x.key === 'kiosk_code') && !txt.includes(CFG.code) && !txt.includes(codeNow), 'Sicherung enthält PIN-Prüfwert oder Kiosk-Code');
     expect(!/token_hash|encrypted_password/.test(txt), 'Sicherung enthält Sitzungs- oder Anmeldedaten');
-    await toast(page, /Sicherung erstellt\./);
   });
   await S('Sicherung: Bon zeigt das Datum der letzten Sicherung', async () => {
     await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay())} (heute).`);
