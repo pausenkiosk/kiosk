@@ -8,7 +8,7 @@ insert into settings(key, value) values ('kiosk_code', '__KIOSK_CODE__'), ('kios
 -- Einstellungen ab Ausbaustufe 7 (Kiosk-Express, Adventskalender); schaden älteren Fassungen nicht
 insert into settings(key, value) values ('liefer_min', '300'), ('advent_von', '2026-12-01'), ('advent_bis', '2026-12-24'),
   ('advent_max_preis', '30'), ('advent_mhd_bis', '2027-02-28'),
-  ('advent_pool', '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":6},{"match":"Kinder Country%","w":5}]') on conflict do nothing;
+  ('advent_pool', '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":11}]') on conflict do nothing;
 
 insert into products(name, category, price_cents, stock, active, created_at) values
   ('Cola',         'Getränke', 150, 12, true,  now() - interval '60 days'),

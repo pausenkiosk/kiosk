@@ -292,17 +292,18 @@ module.exports = async function extras(browser) {
   });
 
   /* ---------- Adventskalender (Gewinnliste advent_pool mit Gewichten, ab v34) ---------- */
-  const POOL = '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":6},{"match":"Kinder Country%","w":5}]';
-  const GEW = { 'Knoppers': 40, 'Corny Big Chocolate Banane': 35, 'Corny Erdbeere': 8, 'Golden Bridge Müsliriegel': 6, 'Choceur Milk & Crisp': 6, 'Kinder Country': 5 };
-  const ADV = ['Knoppers', 'Knoppers Joghurt', 'Knoppers Alt', 'Corny Big Chocolate Banane', 'Corny Big Karamell', 'Corny Big Schoko', 'Corny Erdbeere', 'Golden Bridge Müsliriegel', 'Choceur Milk & Crisp', 'Kinder Country'];
+  const POOL = '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":11}]';
+  const GEW = { 'Knoppers': 40, 'Corny Big Chocolate Banane': 35, 'Choceur Peanut Bits': 8, 'Corny Erdbeere': 8, 'Golden Bridge Müsliriegel': 6, 'Choceur Milk & Crisp': 11 };   // Summe 108
+  const ADV = ['Knoppers', 'Knoppers Joghurt', 'Knoppers Alt', 'Corny Big Chocolate Banane', 'Corny Big Karamell', 'Corny Big Schoko', 'Corny Erdbeere', 'Golden Bridge Müsliriegel', 'Choceur Milk & Crisp', 'Kinder Country', 'Choceur Peanut Bits'];
   const pool = v => sql(`insert into settings values ('advent_pool', '${v.replace(/'/g, "''")}') on conflict (key) do update set value = excluded.value`);
   const mhd = async list => { await sql(`delete from purchase_items where purchase_id is null; ` + list.map(([n, d]) => `insert into purchase_items(purchase_id, product_id, qty, cents, mhd) values (null, '${prod[n]}', 1, 0, '${isoDay(d)}');`).join(' ')); };
   const kauf = async who => call('k_buy', { p_token: tok[who], p_product: prod['E-Riegel'], p_qty: 1 });
   const zeitraum = async (von, bis) => { await setS('advent_von', isoDay(von)); await setS('advent_bis', isoDay(bis)); await sql(`delete from advent_wins`); };
-  const vorrat = n => sql(`update products set stock = ${n}, active = true where category = 'Adventtest'`);
+  const vorrat = n => sql(`update products set stock = ${n} where category = 'Adventtest'`);
   await S('Advent-Vorbereitung: Produkte der Gewinnliste anlegen (inkl. Corny Big Karamell/Schoko, die nie gewinnen dürfen)', async () => {
-    const rows = await sql(`insert into products(name, category, price_cents, cost_cents, stock) values ` + ADV.map(n => `('${n}', 'Adventtest', 100, 40, 5)`).join(',') +
-      ` on conflict (name) do update set category = 'Adventtest', stock = 5, active = true returning id, name`);
+    const rows = await sql(`insert into products(name, category, price_cents, cost_cents, stock, active) values ` +
+      ADV.map(n => n === 'Choceur Peanut Bits' ? `('${n}', 'Adventtest', 0, null, 5, false)` : `('${n}', 'Adventtest', 100, 40, 5, true)`).join(',') +
+      ` on conflict (name) do update set category = 'Adventtest', stock = 5, active = excluded.active, price_cents = excluded.price_cents, cost_cents = excluded.cost_cents returning id, name`);
     rows.forEach(r => { prod[r.name] = r.id; });
     await pool(POOL);
     eq(rows.length, ADV.length, 'angelegte Produkte');
@@ -330,7 +331,7 @@ module.exports = async function extras(browser) {
     eq(await stock('Knoppers Alt'), 5, 'Bestand Knoppers Alt');
   });
   await S('Gruppe ohne Bestand wird nie gezogen (100 Ziehungen, Gewicht 99 : 1)', async () => {
-    await sql(`update products set stock = 100000, active = true where category = 'Adventtest'`); await mhd([]);
+    await sql(`update products set stock = 100000 where category = 'Adventtest'`); await mhd([]);
     await pool('[{"match":"Corny Erdbeere%","w":99},{"match":"Knoppers%","w":1}]');
     await sql(`update products set stock = 0 where id = '${prod['Corny Erdbeere']}'`);
     const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Ida}'; begin for i in 1..100 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
@@ -338,18 +339,38 @@ module.exports = async function extras(browser) {
     await sql(`delete from advent_wins; delete from alerts where text like 'Adventskalender:%'; delete from sales where kind = 'verlust' and product_id in (select id from products where category = 'Adventtest')`); await vorrat(5);
     eq(J(rows), J([{ p: 'Knoppers', n: 100 }]), 'Ergebnis der Ziehungen (in der Gruppe gewinnt „Knoppers“ vor „Knoppers Alt“/„Joghurt“ nach Name)');
   });
-  await S('Verteilung über 2000 simulierte Tage entspricht 40/35/8/6/6/5; Corny Big Karamell/Schoko nie', async () => {
+  await S('Verteilung über 2000 simulierte Tage entspricht 40/35/8/8/6/11 (von 108); Corny Big Karamell/Schoko und Kinder Country nie', async () => {
     await pool(POOL); await mhd([]);
-    await sql(`update products set stock = 100000, active = true where category = 'Adventtest'`);
+    await sql(`update products set stock = 100000 where category = 'Adventtest'`);
     const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Ida}'; begin for i in 1..2000 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
       select coalesce(p, '(kein Gewinn)') p, count(*)::int n from sim group by 1 order by 2 desc`);
     await sql(`delete from advent_wins; delete from alerts where text like 'Adventskalender:%'; delete from sales where kind = 'verlust' and product_id in (select id from products where category = 'Adventtest'); update products set stock = 5 where category = 'Adventtest'`);
     const n = Object.fromEntries(rows.map(r => [r.p, r.n]));
     console.log('      Verteilung 2000 Ziehungen: ' + rows.map(r => `${r.p} ${(r.n / 20).toFixed(1)} %`).join(' | '));
     const bad = [];
-    for (const [p, w] of Object.entries(GEW)) { const pct = (n[p] || 0) / 20, tol = w >= 20 ? 4 : 2.5; if (Math.abs(pct - w) > tol) bad.push(`${p}: ${pct.toFixed(1)} % statt ${w} %`); }
-    for (const p of ['Corny Big Karamell', 'Corny Big Schoko', 'Knoppers Joghurt', 'Knoppers Alt', '(kein Gewinn)']) if (n[p]) bad.push(`${p}: ${n[p]}×`);
+    for (const [p, w] of Object.entries(GEW)) { const soll = w * 100 / 108, pct = (n[p] || 0) / 20, tol = soll >= 20 ? 4 : 2.5; if (Math.abs(pct - soll) > tol) bad.push(`${p}: ${pct.toFixed(1)} % statt ${soll.toFixed(1)} %`); }
+    for (const p of ['Corny Big Karamell', 'Corny Big Schoko', 'Kinder Country', 'Knoppers Joghurt', 'Knoppers Alt', '(kein Gewinn)']) if (n[p]) bad.push(`${p}: ${n[p]}×`);
     expect(bad.length === 0, bad.join(' · '));
+  });
+  await S('Ausgeblendete Gewinn-Ware (Preis 0, kein Einkaufspreis) kann gewinnen, Verlust 0,00 ohne Fehler; Kollegen sehen sie nicht', async () => {
+    await zeitraum(-1, 19); await vorrat(5); await mhd([]);
+    await pool('[{"match":"Choceur Peanut%","w":1}]');
+    const r = await kauf('Frieda');
+    eq(J(r.advent), J({ tag: 2, gewonnen: true, produkt: 'Choceur Peanut Bits' }), 'Gewinn');
+    eq(await stock('Choceur Peanut Bits'), 4, 'Bestand Choceur Peanut Bits');
+    const v = (await db('sales', 'qty,cents,kind', 'product_id', prod['Choceur Peanut Bits'])).filter(x => x.kind === 'verlust');
+    eq(J(v), J([{ qty: 1, cents: 0, kind: 'verlust' }]), 'Verlustbuchung');
+    const st = await call('k_state', { p_token: tok.Frieda });
+    expect(!st.products.some(p => p.name === 'Choceur Peanut Bits'), 'ausgeblendete Gewinn-Ware steht in der Kollegen-Ansicht');
+    await sql(`delete from sales where kind = 'verlust' and product_id = '${prod['Choceur Peanut Bits']}'`); await pool(POOL);
+  });
+  await S('Tage ohne Kauf werden nicht nachgeholt: nach drei Tagen ohne Gewinn heute trotzdem nur ein Gewinn', async () => {
+    await zeitraum(-3, 17); await vorrat(5); await mhd([]);
+    const rs = [await kauf('Frieda'), await kauf('Gustav'), await kauf('Ida')];
+    eq(rs.map(r => r.advent.gewonnen).join(','), 'true,false,false', 'Gewinne bei drei Käufen heute');
+    eq((await db('advent_wins', 'day')).length, 1, 'Einträge insgesamt');
+    eq(rs[0].advent.tag, 4, 'Türchen');
+    await zeitraum(-1, 19);
   });
   await S('Leere oder kaputte Gewinnliste: Kauf klappt, kein Gewinn, kein Fehler', async () => {
     const bad = [];
