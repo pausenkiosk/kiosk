@@ -180,7 +180,7 @@ module.exports = async function auszahlung(browser) {
   await S('Kassensturz gemischt: Einzahlung 20,00, Auszahlung 5,00, Kasse 30,00 → Barverkauf 15,00', async () => {
     await must('a_pay', { p_person: ids.Rita, p_cents: 2000 });
     eq(await must('a_payout', { p_person: ids.Rita, p_cents: 500 }), 'ok', 'Auszahlung');
-    eq(await sturz('30,00'), 'Gebucht: 15,00 € Barverkäufe, 15,00 € waren Einzahlungen.', 'Hinweis');
+    eq(await sturz('30,00'), 'Gebucht: 15,00 € Barverkäufe, 15,00 € stammen aus Einzahlungen.', 'Hinweis');
     const c = await letzter(); eq(`${c.cents}/${c.bar_cents}`, '3000/1500', 'Kassensturz (Inhalt/bar)');
   });
   await S('Kassensturz, Einzahlung und Auszahlung gleich hoch: nichts wird herausgerechnet', async () => {
@@ -192,7 +192,7 @@ module.exports = async function auszahlung(browser) {
     await must('a_pay', { p_person: ids.Rita, p_cents: 2000 });
     eq(await must('a_payout', { p_person: ids.Rita, p_cents: 500 }), 'ok', 'Auszahlung');
     const dlg = await sturz('5,00');
-    expect(/Achtung: Es fehlt Geld/i.test(dlg) && dlg.includes('Es fehlen 10,00 €.') && dlg.includes('In der Kasse waren 5,00 €.'), 'Warn-Dialog: ' + dlg);
+    expect(/Achtung: Es fehlt Geld/i.test(dlg) && dlg.includes('Es fehlen 10,00 €.') && dlg.includes('In der Kasse waren 5,00 €.') && dlg.includes('15,00 € aus Einzahlungen (abzüglich Auszahlungen)'), 'Warn-Dialog: ' + dlg);
     const c = await letzter(); eq(`${c.cents}/${c.bar_cents}`, '500/-1000', 'Kassensturz (Inhalt/bar)');
   });
   await S('Bon: Kassenstand und „Guthaben der Kollegen“ stimmen mit der Datenbank überein', async () => {

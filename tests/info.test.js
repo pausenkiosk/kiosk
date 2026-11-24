@@ -130,19 +130,18 @@ module.exports = async function info(browser) {
   });
 
   /* ---------- Stimmen die Texte mit dem Verhalten überein? (nur was sich nachprüfen lässt) ---------- */
-  await S('Text Haltbarkeit „Rot ab 14 Tagen“: Ware mit genau 14 Tagen Rest ist rot', async () => {
-    await page.evaluate(async day => {
+  await S('Text Haltbarkeit „Rot bei weniger als 14 Tagen“: 13 Tage Rest rot, genau 14 und 30 Tage gelb, 31 Tage grün', async () => {
+    expect((await page.evaluate(() => INFO.mhd)).includes('weniger als 14 Tagen'), 'Text: ' + await page.evaluate(() => INFO.mhd));
+    await page.evaluate(async days => {
       const p = (await SB.from('products').select('id').eq('active', true).order('name').limit(1)).data[0];
-      const { error } = await SB.from('purchase_items').insert({ purchase_id: null, product_id: p.id, qty: 0, cents: 0, mhd: day });
+      const { error } = await SB.from('purchase_items').insert(days.map(d => ({ purchase_id: null, product_id: p.id, qty: 0, cents: 0, mhd: d })));
       if (error) throw new Error(error.message);
-    }, isoDay(14));
+    }, [13, 14, 30, 31].map(n => isoDay(n)));
     await page.reload(); await page.locator('#nav:not([hidden])').waitFor(); await tab('einkauf');
-    const d = isoDay(14).split('-'); const r = row(page, `${d[2]}.${d[1]}.`);
-    await r.first().waitFor();
-    const lamp = await r.first().locator('i.lamp').getAttribute('class');
-    eq(lamp, 'lamp r', `Ampel bei genau 14 Tagen Rest (Text: „${(await page.evaluate(() => INFO.mhd)).slice(60)}“)`);
+    const lamp = async n => { const d = isoDay(n).split('-'); const r = row(page, `${d[2]}.${d[1]}.`).first(); await r.waitFor(); return (await r.locator('i.lamp').getAttribute('class')).replace('lamp ', ''); };
+    eq(`${await lamp(13)}/${await lamp(14)}/${await lamp(30)}/${await lamp(31)}`, 'r/y/y/g', 'Ampel bei 13/14/30/31 Tagen Rest');
   });
-  await S('Text Sicherung „Lädt alle Kiosk-Daten“: die Datei enthält auch Wünsche und Foto-/Einkaufs-Aufträge', async () => {
+  await S('Text Sicherung: die Datei enthält auch Wünsche (samt Stimmen) und Foto-/Einkaufs-Aufträge', async () => {
     await tab('bon'); await hideToast(page);
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.locator('#app [data-a="a-backup"]').click()]);
     const data = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
@@ -150,32 +149,50 @@ module.exports = async function info(browser) {
     const fehlt = ['wishes', 'wish_votes', 'photo_jobs'].filter(k => !(k in data));
     expect(fehlt.length === 0, 'In der Sicherung fehlen die Tabellen: ' + fehlt.join(', '));
   });
-  await K('Text Buchungen „Hier steht jede Buchung“: auch die 31. Buchung ist zu sehen', async () => {
+  await K('Text Buchungen „deine letzten 30 Buchungen“: bei 31 vorhandenen werden genau 30 gezeigt', async () => {
+    expect((await page.evaluate(() => INFO.k_entries)).includes('letzten 30 Buchungen'), 'Text: ' + await page.evaluate(() => INFO.k_entries));
     await page.evaluate(async ([pid, day]) => {
       const rows = Array.from({ length: 31 }, (_, i) => ({ person_id: pid, day, amount_cents: i % 2 ? 1 : -1, kind: 'korrektur' }));
       const { error } = await SB.from('ledger').insert(rows); if (error) throw new Error(error.message);
     }, [vera, isoDay()]);
     await kp.reload(); await see(kp, 'Schuldschein von Vera');
-    eq(await kp.locator('#app .it', { hasText: /Korrektur|Übertrag/ }).count(), 31, 'angezeigte Buchungen bei 31 vorhandenen');
+    eq(await kp.locator('#app .it', { hasText: /Korrektur|Übertrag/ }).count(), 30, 'angezeigte Buchungen bei 31 vorhandenen');
   });
-  await K('Text Rangliste „Welche Produkte jemand kauft, wird nicht gespeichert“: 5 Minuten nach dem Kauf ist die Verbindung Kauf–Produkt weg, auch wenn niemand die App öffnet', async () => {
+  /* „Welche Produkte jemand kauft, wird nicht gespeichert“: die Zuordnung Kauf–Produkt lebt nur 5 Minuten (fürs Rückgängig). */
+  const kaufen = async () => {
     await idle(kp); await hideToast(kp);
     await kp.locator('button.it').first().click();
     await kp.locator('#modal button.pri').click();
     await toast(kp, /angeschrieben/);
     await idle(kp);
-    // 10 Minuten „vergehen lassen“ (nur in der Datenbank möglich); seitdem öffnet niemand die Kollegen-Ansicht.
-    await sql(`update ledger set ts = ts - interval '10 minutes' where person_id = '${vera}' and ts is not null`);
-    const l = (await db('ledger', 'sale_id,ts,kind', 'person_id', vera)).filter(x => x.kind === 'kauf');
-    eq(l.length, 1, 'Käufe von Vera');
-    const sale = l[0].sale_id ? (await db('sales', 'product_id', 'id', l[0].sale_id))[0] : null;
-    const name = sale ? (await db('products', 'name', 'id', sale.product_id))[0].name : null;
-    expect(l[0].sale_id === null, `Der Kauf ist 10 Minuten später noch mit dem Produkt verknüpft (für den Verwalter lesbar: Vera → ${name})`);
+  };
+  const altern = () => sql(`update ledger set ts = ts - interval '10 minutes' where person_id = '${vera}' and ts is not null`);   // 10 Minuten „vergehen lassen“
+  const offen = async () => (await db('ledger', 'sale_id,kind', 'person_id', vera)).filter(x => x.kind === 'kauf' && x.sale_id).length;
+  await K('Zuordnung Kauf–Produkt: direkt nach dem Kauf vorhanden (für „Rückgängig“)', async () => {
+    await kaufen();
+    eq(await offen(), 1, 'Käufe mit Zuordnung direkt nach dem Kauf');
   });
-  await K('Die Verknüpfung verschwindet, sobald irgendein Kollege die App öffnet', async () => {
+  await S('Zuordnung verschwindet nach 5 Minuten beim Laden der Verwaltung', async () => {
+    await altern();
+    eq(await offen(), 1, 'Zuordnung vor dem Laden der Verwaltung (nur gealtert)');
+    await page.reload(); await page.locator('#nav:not([hidden])').waitFor();
+    for (let i = 0; i < 20 && await offen(); i++) await page.waitForTimeout(300);
+    eq(await offen(), 0, 'Käufe mit Zuordnung nach dem Laden der Verwaltung');
+  });
+  await K('Zuordnung verschwindet nach 5 Minuten beim nächsten Kauf (auch dem eines anderen)', async () => {
+    await kaufen(); await altern();
+    eq(await offen(), 1, 'gealterte Zuordnung vor dem nächsten Kauf');
+    await kaufen();
+    eq(await offen(), 1, 'Käufe mit Zuordnung (nur der eben getätigte)');
+  });
+  await K('Zuordnung verschwindet, sobald ein Kollege die App öffnet', async () => {
+    await altern();
     await kp.reload(); await see(kp, 'Schuldschein von Vera');
-    const l = (await db('ledger', 'sale_id,kind', 'person_id', vera)).filter(x => x.kind === 'kauf');
-    eq(l[0].sale_id, null, 'Verknüpfung nach dem Öffnen der App');
+    eq(await offen(), 0, 'Käufe mit Zuordnung nach dem Öffnen der App');
+  });
+  await S('Zeitsteuerung in der Datenbank: Aufräumen läuft alle 5 Minuten auch ohne App-Aufruf (pg_cron „kiosk-cleanup“)', async () => {
+    const j = await sql(`select schedule, command, active from cron.job where jobname = 'kiosk-cleanup'`);
+    eq(JSON.stringify(j), JSON.stringify([{ schedule: '*/5 * * * *', command: 'select public.k_cleanup()', active: true }]), 'Auftrag in pg_cron');
   });
   await S('Aufräumen; keine Fehler in der Browser-Konsole', async () => {
     await page.evaluate(async () => { await SB.from('purchase_items').delete().is('purchase_id', null); });

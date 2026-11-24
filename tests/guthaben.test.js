@@ -178,7 +178,7 @@ module.exports = async function guthaben(browser) {
     await tab('kasse'); await hideToast(page);
     await page.locator('#app [data-a="a-cash"]').click();
     await fillModal(page, 'Kassensturz', { c: '50,00' });
-    await toast(page, /^Gebucht: 7,50 € Barverkäufe, 42,50 € waren Einzahlungen\.$/);
+    await toast(page, /^Gebucht: 7,50 € Barverkäufe, 42,50 € stammen aus Einzahlungen\.$/);
     await idle(page);
   });
   await S('Rangliste zählt nur Käufe, keine Einzahlungen', async () => {
