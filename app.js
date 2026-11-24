@@ -28,6 +28,8 @@ const head = sub => `<p class="ctr"><span class="logo">KIOSK</span><span class="
 const rpc = async (fn, args) => { const { data, error } = await SB.rpc(fn, args); if (error) throw error; return data; };
 const ok = r => { if (r.error) throw r.error; return r.data; };
 
+const INFO = {"k_saldo": "Dein Schuldschein ist wie ein kleines Konto. Was du anschreibst, kommt dazu. Gibst du dem Betreiber Geld, wird es abgezogen. Gibst du mehr, als offen ist, hast du Guthaben, von dem deine nächsten Einkäufe abgehen.", "k_buy": "Produkt antippen und Anzahl wählen. Der Betrag landet auf deinem Schuldschein. Die Stückzahl zeigt, was laut App im Regal liegt; sie kann vom echten Regal abweichen.", "k_entries": "Hier steht jede Buchung mit Datum. Einen Kauf kannst du 5 Minuten lang zurücknehmen, falls du dich vertippt hast. Danach hilft der Betreiber.", "k_wish": "Dein Wunsch geht ohne deinen Namen an den Betreiber. Wünschen mehrere dasselbe, wird es zusammengezählt.", "kasse": "Kassenstand: alle Einnahmen minus alle Ausgaben seit Beginn, auch die Einkäufe, die du aus eigener Tasche bezahlt hast. Ein Minus heißt: Der Kiosk schuldet dir noch Geld.", "fehl": "Fehlbetrag: Ware, die laut Zählung seit dem vorletzten Kassensturz ohne Buchung verschwunden ist, minus das Bargeld für Barverkäufe. Plus heißt, es fehlt Geld oder Ware; nahe 0 ist gut.", "ampel": "Die Ampel richtet sich danach, wie lange der Bestand noch reicht: Bestand geteilt durch den Verkauf pro Woche der letzten 4 Wochen. Ein Ladenhüter mit 4 Stück kann grün sein, ein Renner mit 10 Stück rot.", "mhd": "Haltbarkeit: Gelb ab 30 Tagen vor Ablauf, damit noch Zeit für einen Abverkaufspreis bleibt. Rot ab 14 Tagen und wenn es abgelaufen ist.", "claude": "Was du hier schreibst, liest Claude werktags um 10:13 und 14:13 Uhr. Daten und Fragen erledigt Claude direkt, Änderungen an der App gehen an die Programmierung. Schuldscheine, Löschen und Sicherheit nur nach Rückfrage.", "backup": "Lädt alle Kiosk-Daten als Datei auf dein Gerät, ohne PINs und ohne QR-Code. Zusätzlich legt Claude jeden Freitag eine Sicherung in dein Google Drive.", "zaehlen": "Trag ein, was wirklich im Regal liegt. Was seit der letzten Zählung ohne Buchung fehlt, zählt als Barverkauf oder Schwund und fließt in den Fehlbetrag. Am besten direkt vor einem Kassensturz zählen.", "fotos": "Fotos vom Regal oder von einzelnen Produkten mit Haltbarkeitsdatum, bis zu 60 auf einmal. Claude zählt bzw. liest die Daten und legt einen Vorschlag ab, den du mit „Prüfen“ bestätigst.", "wuensche": "Wünsche der Kollegen, ohne Namen. Die Zahl zeigt, wie viele dasselbe wollen. „Erledigt“ nimmt den Wunsch aus der Liste.", "einkauf": "Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag; gebucht wird erst, wenn du ihn prüfst und speicherst.", "kassensturz": "Kassensturz geht, wann immer du willst, ohne festen Rhythmus: Kasse leeren, Geld zählen, Betrag eintragen. Einzahlungen und Auszahlungen seit dem letzten Kassensturz rechnet die App heraus, der Rest zählt als Barverkauf.", "storno": "Storno nimmt eine eigene Eingabe zurück: Buchung von Hand, Einkauf (samt Bestand) oder den letzten Kassensturz. Einzahlungen korrigierst du unter Leute.", "schuldscheine": "Offener Betrag oder Guthaben pro Person. Einzahlung: Geld, das du bekommen hast; über den offenen Betrag hinaus wird es Guthaben. Auszahlung: Guthaben bar zurückgeben. Lampe grün: hat zugestimmt, leer: noch nie angemeldet, rot: gerade gesperrt.", "rangliste": "Umsatz pro Person aus Käufen per Schuldschein, ohne Einzahlungen. Welche Produkte jemand kauft, wird nicht gespeichert.", "qr": "Über diesen Code melden sich Kollegen an. Ein neuer Code macht den alten sofort ungültig; wer angemeldet ist, bleibt es. Ab 30 Tagen erinnert die Startseite."};
+const ii = k => `<button type="button" class="ii noprint" data-a="info" data-k="${k}" aria-label="Erklärung">i</button>`;
 let toastT;
 function toast(msg) {
   toastEl.textContent = msg; toastEl.hidden = false;
@@ -116,14 +118,14 @@ function kRender() {
     `<button class="it" data-a="k-buy" data-id="${p.id}"><i class="lamp ${p.stock > 0 ? 'g' : 'o'}"></i><span>${esc(p.name)}${p.sale ? ' <b class="neg">Abverkauf</b>' : ''}</span>` +
     `<span class="mut">${p.stock > 0 ? p.stock + ' St' : 'aus'}</span><span>${p.sale ? `<s>${eur(p.normal)}</s> ` : ''}${eur(p.cents)} €</span></button>`).join('')).join('');
   app.innerHTML = `<div class="paper">${head('Schuldschein von ' + esc(s.vorname))}
-      ${ln(s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN', eur(Math.abs(s.saldo)) + ' €', 'big')}
+      ${ln((s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN') + ' ' + ii('k_saldo'), eur(Math.abs(s.saldo)) + ' €', 'big')}
       <p class="small mut">${s.saldo < 0 ? 'Einkäufe werden von deinem Guthaben abgezogen. Ist es aufgebraucht, schreibst du wie gewohnt an.' : 'Bezahlen oder Guthaben aufladen: Betrag dem Betreiber geben, er trägt ihn ein.'}</p></div>
-    <div class="paper"><h2>Bestand und Anschreiben</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
-    <div class="paper"><h2>Deine Buchungen</h2>${s.entries.length ? s.entries.map(e =>
-      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
+    <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
+    <div class="paper"><h2>Deine Buchungen ${ii('k_entries')}</h2>${s.entries.length ? s.entries.map(e =>
+      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
       `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents < 0 && e.kind !== 'zahlung' ? '−' : ''}${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
-    <div class="paper"><h2>Wunsch</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
+    <div class="paper"><h2>Wunsch ${ii('k_wish')}</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
       <div class="row"><button class="btn" data-a="k-wish">Wunsch abgeben</button></div></div>
     <div class="paper"><div class="row"><button class="btn" data-a="k-pin">PIN ändern</button><button class="btn" data-a="k-logout">Abmelden</button></div></div>`;
 }
@@ -275,28 +277,28 @@ function vBon() {
   const cheap = act.filter(p => p.cost_cents && p.price_cents < p.cost_cents);
   const wk = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][t.getDay()];
   return `<div class="paper">${head(`${wk} ${t.toLocaleDateString('de-DE')} · KW ${isoWeek(t)[1]}`)}
-    ${ln('KASSENSTAND', eur(stand), 'big' + (stand < 0 ? ' neg' : ''))}
+    ${ln('KASSENSTAND ' + ii('kasse'), eur(stand), 'big' + (stand < 0 ? ' neg' : ''))}
     ${ln('Einnahmen Monat', eur(sum(j => j.day.startsWith(ym), 'in_cents')))}
     ${ln('Ausgaben Monat', eur(sum(j => j.day.startsWith(ym), 'out_cents')))}
     ${ln('Offene Schuldscheine', eur(offen))}
     ${guthaben ? ln('Guthaben der Kollegen', eur(guthaben)) : ''}
-    ${ln('Fehlbetrag letzte Zählung', fehl)}
+    ${ln('Fehlbetrag letzte Zählung ' + ii('fehl'), fehl)}
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
     ${(() => { const a = d.set.kiosk_code_at ? Math.floor((t - pd(d.set.kiosk_code_at)) / 864e5) : 0;
       return a >= 30 ? `<hr><h2>QR-Code erneuern</h2><p class="small">Der QR-Code am Kiosk ist ${a} Tage alt. Unter Leute einen neuen erzeugen und den Aushang neu drucken.</p><div class="row"><button class="btn sm" data-a="a-tab" data-t="leute">Zu Leute</button></div>` : ''; })()}
-    <hr><h2>Nachbestellen (${red.length})</h2>${list(red, p => p.reachTxt) || '<p class="mut">Nichts.</p>'}
+    <hr><h2>Nachbestellen (${red.length}) ${ii('ampel')}</h2>${list(red, p => p.reachTxt) || '<p class="mut">Nichts.</p>'}
     ${yel.length ? `<hr><h2>Wird knapp (${yel.length})</h2>${list(yel, p => p.reachTxt)}` : ''}
-    ${urgent.length ? `<hr><h2 class="neg">Läuft in 14 Tagen ab (${urgent.length})</h2>` + urgent.map(m => mrow(m, 'r')).join('') : ''}
-    ${soon.length ? `<hr><h2>Läuft in 30 Tagen ab (${soon.length})</h2><p class="small mut">Zeit für einen Abverkaufspreis, falls noch viel da ist.</p>` + soon.map(m => mrow(m, 'y')).join('') : ''}
+    ${urgent.length ? `<hr><h2 class="neg">Läuft in 14 Tagen ab (${urgent.length}) ${ii('mhd')}</h2>` + urgent.map(m => mrow(m, 'r')).join('') : ''}
+    ${soon.length ? `<hr><h2>Läuft in 30 Tagen ab (${soon.length}) ${ii('mhd')}</h2><p class="small mut">Zeit für einen Abverkaufspreis, falls noch viel da ist.</p>` + soon.map(m => mrow(m, 'y')).join('') : ''}
     ${cheap.length ? `<hr><h2>Unter Einkaufspreis (${cheap.length})</h2>` + cheap.map(p => `<div class="it"><i class="lamp y"></i><span>${esc(p.name)}</span><span>VK ${eur(p.price_cents)}</span><span>EK ${eur(p.cost_cents)}</span></div>`).join('') : ''}
     <hr>${ln('Im grünen Bereich', act.filter(p => p.lamp === 'g').length + ' Artikel')}
     ${act.length ? '' : '<p class="small mut">Noch kein Produkt ist aktiv. Trage unter Regal Preise ein und schalte Produkte frei.</p>'}
     </div>
     <div class="paper"><div class="row"><button class="btn pri" data-a="a-go" data-t="regal">Zählen</button><button class="btn" data-a="a-go" data-t="einkauf">Einkauf</button><button class="btn" data-a="a-go" data-t="leute">Zahlung</button></div></div>
-    <div class="paper"><h2>An Claude</h2><p class="small mut">Verbesserung, Fehler oder Auftrag eintippen oder über das Mikrofon der Tastatur diktieren. Claude liest das beim nächsten Durchlauf.</p>
+    <div class="paper"><h2>An Claude ${ii('claude')}</h2><p class="small mut">Verbesserung, Fehler oder Auftrag eintippen oder über das Mikrofon der Tastatur diktieren. Claude liest das beim nächsten Durchlauf.</p>
       ${d.requests.map(q => `<div class="it"><i class="lamp ${q.status === 'erledigt' ? 'g' : q.status === 'rueckfrage' ? 'r' : 'y'}"></i><span>${esc(q.text)}${q.answer ? `<br><span class="mut">Claude: ${esc(q.answer)}</span>` : ''}</span><span></span><span class="mut">${dshort(q.at.slice(0, 10))}</span></div>`).join('')}
       <div class="row"><button class="btn pri" data-a="a-req">Nachricht an Claude</button></div></div>
-    <div class="paper"><h2>Sicherung</h2>${(() => { const b = d.set.backup_at, age = b ? Math.floor((t - pd(b)) / 864e5) : null;
+    <div class="paper"><h2>Sicherung ${ii('backup')}</h2>${(() => { const b = d.set.backup_at, age = b ? Math.floor((t - pd(b)) / 864e5) : null;
       return `<p class="small ${age === null || age > 14 ? 'neg' : 'mut'}">${age === null ? 'Du hast noch keine Sicherung heruntergeladen.' : `Letzte heruntergeladene Sicherung: ${dshort(b)} (${age === 0 ? 'heute' : age === 1 ? 'gestern' : 'vor ' + age + ' Tagen'}).`}${age === null || age > 14 ? ' Bitte jetzt sichern.' : ''}</p>`; })()}
       <p class="small mut">Speichert alle Kiosk-Daten als Datei auf dein Gerät, ohne PINs und ohne Kiosk-Code. Die Datei enthält Vornamen und Schuldenstände, also nicht weitergeben.</p>
       <div class="row"><button class="btn" data-a="a-backup">Sicherung herunterladen</button></div></div>`;
@@ -307,7 +309,7 @@ function vRegal() {
   const rows = d.products.filter(p => A.counting ? p.active : true).map(p => A.counting
     ? `<div class="it"><i class="lamp ${p.lamp}"></i><span>${esc(p.name)}</span><span class="mut">soll ${p.stock}${p.id in prop ? ' · Foto ' + prop[p.id] : ''}</span><span><input class="cnt" type="number" inputmode="numeric" min="0" data-cnt="${p.id}" value="${p.id in prop ? prop[p.id] : p.stock}" aria-label="Gezählt ${esc(p.name)}"></span></div>`
     : `<button class="it" data-a="a-prod" data-id="${p.id}"><i class="lamp ${p.active ? p.lamp : 'o'}"></i><span>${esc(p.name)}${p.active ? '' : ' <span class="mut">(aus)</span>'}${p.sale_cents != null ? ' <b class="neg">%</b>' : ''}</span><span>${p.stock} St · ${p.reachTxt}</span><span>${eur(p.price_cents)}</span></button>`).join('');
-  return `<div class="paper"><h2>${A.counting ? 'Bestand zählen' : 'Regal'}</h2>
+  return `<div class="paper"><h2>${A.counting ? 'Bestand zählen ' + ii('zaehlen') : 'Regal ' + ii('fotos')}</h2>
     <p class="small mut">${A.counting ? 'Trage ein, was wirklich im Regal steht. Die Differenz zum Soll zählt als Barverkauf oder Schwund.' + (A.job ? ' Die Felder sind mit dem Vorschlag aus dem Foto gefüllt' + (A.job.note ? ': ' + esc(A.job.note) : '.') : '') : 'Antippen zum Bearbeiten. Reichweite = Bestand ÷ Wochenverkauf der letzten 4 Wochen.'}</p>
     ${rows}
     <div class="row">${A.counting ? '<button class="btn" data-a="a-cnt-x">Abbrechen</button><button class="btn pri" data-a="a-cnt-ok">Zählung speichern</button>'
@@ -315,10 +317,10 @@ function vRegal() {
     ${A.counting ? '' : '<input type="file" id="foto" accept="image/*" multiple hidden>' + d.jobs.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>Foto vom ${dshort(j.at.slice(0, 10))}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-job" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-jobdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
     ${A.counting ? '' : `<div class="paper sheet printonly">${head('Preisliste · Stand ' + new Date().toLocaleDateString('de-DE'))}${(() => { const g = {}; d.products.filter(p => p.active).forEach(p => { (g[p.category] = g[p.category] || []).push(p); });
       return Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(p => ln(esc(p.name), (p.sale_cents != null ? `<s>${eur(p.price_cents)}</s> ` : '') + eur(p.sale_cents ?? p.price_cents) + ' €')).join('')).join(''); })()}<hr><p class="small">Anschreiben per QR-Code oder bar in die Kasse.</p></div>
-    <div class="paper"><h2>Wünsche der Kollegen</h2>${d.wishes.length ? d.wishes.map(w => ({ ...w, n: (w.wish_votes[0] || {}).count || 0 })).sort((a, b) => b.n - a.n).map(w =>
+    <div class="paper"><h2>Wünsche der Kollegen ${ii('wuensche')}</h2>${d.wishes.length ? d.wishes.map(w => ({ ...w, n: (w.wish_votes[0] || {}).count || 0 })).sort((a, b) => b.n - a.n).map(w =>
       `<div class="it"><i></i><span>${esc(w.text)}</span><span class="mut">${w.n}×</span><span><button class="btn sm" data-a="a-wish" data-id="${w.id}">Erledigt</button></span></div>`).join('') : '<p class="mut">Noch keine Wünsche.</p>'}
       <p class="small mut">Gleiche Wünsche werden zusammengezählt. Namen werden nicht angezeigt.</p></div>
-    <div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
+    <div class="paper"><h2>Ampel ${ii('ampel')}</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
       <div class="row"><button class="btn" data-a="a-amp">Schwellen ändern</button></div></div>`}`;
 }
 
@@ -329,7 +331,7 @@ const cartRow = (it = {}) => `<div class="cart"><select aria-label="Produkt"><op
 
 function vEinkauf() {
   const d = A.d, t = new Date(), dr = A.draft && A.draft.result ? A.draft.result : null;
-  return `<div class="paper"><h2>Einkauf per Foto oder Ansage</h2>
+  return `<div class="paper"><h2>Einkauf per Foto oder Ansage ${ii('einkauf')}</h2>
     <p class="small mut">Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag, den du hier nur noch prüfst.</p>
     <input type="file" id="bonfoto" accept="image/*" multiple hidden>
     <div class="row"><button class="btn pri" data-a="a-bon">Bon oder Screenshot</button><button class="btn pri" data-a="a-say">Einkauf ansagen</button></div>
@@ -341,7 +343,7 @@ function vEinkauf() {
     <p class="small mut">Je Zeile: Produkt, Stückzahl, Gesamtpreis, darunter das Haltbarkeitsdatum (optional).</p>
     <div id="cart">${dr && dr.items && dr.items.length ? dr.items.map(cartRow).join('') : cartRow() + cartRow()}</div>
     <div class="row"><button class="btn" data-a="a-cart">Zeile dazu</button><button class="btn pri" data-a="a-buy">Einkauf speichern</button></div></div>
-    <div class="paper"><h2>Haltbarkeit</h2>${d.mhd.length ? d.mhd.map(m => { const days = Math.ceil((pd(m.mhd) - t) / 864e5); return `<div class="it"><i class="lamp ${days < 14 ? 'r' : days <= 30 ? 'y' : 'g'}"></i><span>${esc(pname(m.product_id))}${m.qty ? ' · ' + m.qty + ' St' : ''}</span><span>${dshort(m.mhd)} (${days < 0 ? 'abgelaufen' : days + ' T'})</span>
+    <div class="paper"><h2>Haltbarkeit ${ii('mhd')}</h2>${d.mhd.length ? d.mhd.map(m => { const days = Math.ceil((pd(m.mhd) - t) / 864e5); return `<div class="it"><i class="lamp ${days < 14 ? 'r' : days <= 30 ? 'y' : 'g'}"></i><span>${esc(pname(m.product_id))}${m.qty ? ' · ' + m.qty + ' St' : ''}</span><span>${dshort(m.mhd)} (${days < 0 ? 'abgelaufen' : days + ' T'})</span>
       <span><button class="btn sm" data-a="a-mhd" data-id="${m.id}" data-p="${m.product_id}" data-q="${m.qty}">…</button></span></div>`; }).join('') : '<p class="mut">Keine offenen Haltbarkeitsdaten.</p>'}</div>`;
 }
 
@@ -375,13 +377,13 @@ function chart(bs) {
 function vKasse() {
   const d = A.d, bs = buckets(A.span);
   const sales = d.products.map(p => ({ n: p.name, u: d.sales.filter(s => s.product_id === p.id && s.kind !== 'verlust' && new Date(s.at) >= Date.now() - 28 * 864e5).reduce((a, s) => a + s.qty, 0) })).filter(x => x.u > 0).sort((a, b) => b.u - a.u);
-  return `<div class="paper"><h2>Einnahmen und Ausgaben</h2>
+  return `<div class="paper"><h2>Einnahmen und Ausgaben ${ii('kassensturz')}</h2>
     <div class="seg">${[['week', 'Woche'], ['month', 'Monat'], ['year', 'Jahr']].map(([k, l]) => `<button data-a="a-span" data-s="${k}" class="${A.span === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     ${chart(bs)}<p class="small mut">Schwarz: Einnahmen · Rot: Ausgaben</p>
     <table><tr><th>Zeitraum</th><th>Ein</th><th>Aus</th><th>Saldo</th></tr>${bs.slice().reverse().map(b => `<tr><td>${esc(A.span === 'year' ? b.label : b.label + ' ' + b.key.slice(2, 4))}</td><td>${eur(b.i)}</td><td>${eur(b.o)}</td><td class="${b.i - b.o < 0 ? 'neg' : ''}">${eur(b.i - b.o)}</td></tr>`).join('')}</table>
     <div class="row"><button class="btn pri" data-a="a-cash">Kassensturz</button><button class="btn" data-a="a-jour">Buchung von Hand</button></div></div>
     <div class="paper"><h2>Verkauf letzte 4 Wochen</h2>${sales.length ? sales.map(x => ln(esc(x.n), x.u + ' St')).join('') : '<p class="mut">Noch keine Verkaufsdaten. Sie entstehen durch QR-Buchungen und Zählungen.</p>'}</div>
-    <div class="paper"><h2>Letzte Buchungen</h2>${d.journal.slice(0, 25).map(j => `<div class="it"><i></i><span>${dshort(j.day)} ${esc(j.text)}</span><span>${(j.kind || j.source) === 'hand' || ((j.kind === 'bar' || j.kind === 'einkauf') && j.ref) ? `<button class="btn sm" data-a="a-storno" data-id="${j.id}">Storno</button>` : ''}</span><span class="${j.out_cents ? 'neg' : ''}">${j.out_cents ? '−' + eur(j.out_cents) : eur(j.in_cents)}</span></div>`).join('')}</div>`;
+    <div class="paper"><h2>Letzte Buchungen ${ii('storno')}</h2>${d.journal.slice(0, 25).map(j => `<div class="it"><i></i><span>${dshort(j.day)} ${esc(j.text)}</span><span>${(j.kind || j.source) === 'hand' || ((j.kind === 'bar' || j.kind === 'einkauf') && j.ref) ? `<button class="btn sm" data-a="a-storno" data-id="${j.id}">Storno</button>` : ''}</span><span class="${j.out_cents ? 'neg' : ''}">${j.out_cents ? '−' + eur(j.out_cents) : eur(j.in_cents)}</span></div>`).join('')}</div>`;
 }
 
 function vLeute() {
@@ -393,13 +395,13 @@ function vLeute() {
   const url = location.origin + location.pathname + '?k=' + (d.set.kiosk_code || '');
   let qr = '';
   try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = `<img src="${q.createDataURL(12, 4)}" alt="QR-Code für den Kiosk">`; } catch { qr = ''; }
-  return `<div class="paper"><h2>Schuldscheine</h2>${ps.length ? ps.slice().sort((a, b) => b.saldo - a.saldo).map(p =>
+  return `<div class="paper"><h2>Schuldscheine ${ii('schuldscheine')}</h2>${ps.length ? ps.slice().sort((a, b) => b.saldo - a.saldo).map(p =>
     `<div class="it"><i class="lamp ${p.locked_until && new Date(p.locked_until) > new Date() ? 'r' : p.consent_at ? 'g' : 'o'}"></i><span>${esc(p.vorname)}</span><span class="${p.saldo > 0 ? '' : 'mut'}">${p.saldo < 0 ? 'Guthaben ' + eur(-p.saldo) : eur(p.saldo)}</span>
-     <span><button class="btn sm" data-a="a-pay" data-id="${p.id}">Einzahlung</button> <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
+     <span><button class="btn sm" data-a="a-pay" data-id="${p.id}">Einzahlung</button>${p.saldo < 0 ? ` <button class="btn sm" data-a="a-payout" data-id="${p.id}">Auszahlung</button>` : ''} <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
     <p class="small mut">Grün: hat zugestimmt · leer: noch nicht angemeldet · rot: gerade gesperrt</p>
     <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button><button class="btn" data-a="a-persons">Mehrere als Liste</button></div></div>
-    <div class="paper"><h2>Rangliste Umsatz</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
-    <div class="paper poster sheet"><h2 class="noprint">QR-Code für den Kiosk</h2><p class="small mut noprint">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste. Zum Speichern lange auf den Code drücken und „In Fotos sichern“ wählen.</p>
+    <div class="paper"><h2>Rangliste Umsatz ${ii('rangliste')}</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
+    <div class="paper poster sheet"><h2 class="noprint">QR-Code für den Kiosk ${ii('qr')}</h2><p class="small mut noprint">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste. Zum Speichern lange auf den Code drücken und „In Fotos sichern“ wählen.</p>
       <div class="printonly"><p class="ctr"><span class="logo">KIOSK</span></p><p class="ctr">Anschreiben mit dem Handy</p></div>
       <div class="qr">${qr}</div>
       <div class="printonly"><p>1. Code mit der Kamera scannen</p><p>2. Vornamen antippen, PIN eingeben</p><p>3. Produkt antippen und anschreiben</p><p>Bar bezahlen geht weiterhin. Mitmachen ist freiwillig.</p></div>
@@ -515,12 +517,12 @@ const aActs = {
   },
   'a-cash': async () => {
     const v = await ask('Kassensturz', [{ k: 'c', label: 'Wie viel Geld war in der Kasse? (€)', mode: 'decimal' }], 'Buchen',
-      '<p class="small mut">Kasse leeren, alles zählen und den Betrag eintragen. Schuldschein-Zahlungen, die du seit dem letzten Kassensturz gebucht hast, zieht die App ab; der Rest zählt als Barverkauf.</p>');
+      '<p class="small mut">Kasse leeren, alles zählen und den Betrag eintragen. Einzahlungen und Auszahlungen seit dem letzten Kassensturz rechnet die App heraus; der Rest zählt als Barverkauf. Wie oft du das machst, ist egal.</p>');
     const c = v ? cents(v.c) : null; if (c === null || c < 0) return;
     const r = await rpc('a_cash_box', { p_cents: c }) || { paid: 0, bar: c };
     await reload();
     if (r.bar < 0) await ask('Achtung: Es fehlt Geld', [], 'Verstanden', `<p>In der Kasse waren ${eur(c)} €. Du hast seit dem letzten Kassensturz aber ${eur(r.paid)} € Schuldschein-Zahlungen gebucht.</p><p class="big neg">Es fehlen ${eur(-r.bar)} €.</p><p class="small mut">Als Barverkauf wurden 0,00 € gebucht. Prüfe, ob eine Zahlung nicht in die Kasse gelegt oder doppelt gebucht wurde.</p>`);
-    else toast(`Gebucht: ${eur(r.bar)} € Barverkäufe` + (r.paid ? `, ${eur(r.paid)} € waren Schuldschein-Zahlungen.` : '.'));
+    else toast(`Gebucht: ${eur(r.bar)} € Barverkäufe` + (r.paid > 0 ? `, ${eur(r.paid)} € waren Einzahlungen.` : r.paid < 0 ? `, ${eur(-r.paid)} € Auszahlungen sind eingerechnet.` : '.'));
   },
   'a-storno': async el => {
     const j = A.d.journal.find(x => x.id === el.dataset.id);
@@ -551,6 +553,17 @@ const aActs = {
     await rpc('a_pay', { p_person: p.id, p_cents: c });
     const neu = await saldoNow();
     toast(neu < 0 ? `Gebucht. ${p.vorname} hat jetzt ${eur(-neu)} € Guthaben.` : neu > 0 ? `Gebucht. Noch offen: ${eur(neu)} €.` : 'Gebucht. Schuldschein ist ausgeglichen.');
+    await reload();
+  },
+  'a-payout': async el => {
+    const p = A.d.persons.find(x => x.id === el.dataset.id);
+    const saldo = (await pages(() => SB.from('ledger').select('amount_cents').eq('person_id', p.id).order('id'))).data.reduce((a, l) => a + l.amount_cents, 0);
+    if (saldo >= 0) { toast(p.vorname + ' hat kein Guthaben.'); return reload(); }
+    const v = await ask('Auszahlung an ' + p.vorname, [{ k: 'c', label: 'Ausgezahlter Betrag €', mode: 'decimal', value: eur(-saldo) }], 'Auszahlung buchen',
+      `<p class="small">Guthaben: ${eur(-saldo)} €. Mehr lässt sich nicht auszahlen. Das Geld kommt aus der Kioskkasse.</p>`);
+    const c = v && cents(v.c); if (!c || c <= 0) return;
+    const r = await rpc('a_payout', { p_person: p.id, p_cents: c });
+    toast(r === 'ok' ? `Ausgezahlt: ${eur(c)} €.` : r === 'zu_viel' ? 'Nicht gebucht: Der Betrag ist höher als das Guthaben.' : 'Nicht gebucht.');
     await reload();
   },
   'a-more': async el => {
@@ -612,6 +625,7 @@ document.addEventListener('click', async e => {
   const a = el.dataset.a;
   if (a === 'm-x') return modalDone && modalDone(null);
   if (a === 'm-close') { modal.hidden = true; modal.innerHTML = ''; return; }
+  if (a === 'info') { modal.innerHTML = `<div class="paper"><p>${esc(INFO[el.dataset.k] || '')}</p><div class="row"><button class="btn pri" data-a="m-close">OK</button></div></div>`; modal.hidden = false; return; }
   if (a === 'go-admin') { location.hash = '#verwaltung'; return aLoginScreen(); }
   const fn = kActs[a] || aActs[a]; if (!fn) return;
   if (['a-tab', 'a-go', 'a-span'].includes(a)) return fn(el); // Wechsel zwischen Bereichen geht immer sofort

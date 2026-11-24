@@ -39,9 +39,11 @@ const data = {
     if (u.pathname.includes('/rpc/is_admin')) return r.fulfill({ json: true });
     if (u.pathname.includes('/rpc/a_cash_box')) return r.fulfill({ json: { paid: 500, bar: 1320 } });
     if (u.pathname.includes('/rpc/a_storno')) return r.fulfill({ json: 'ok' });
+    if (u.pathname.includes('/rpc/a_payout')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/storage/v1/object/list')) return r.fulfill({ json: [] });
     if (u.pathname.includes('/auth/')) return r.fulfill({ json: {} });
-    if (m === 'GET' && data[t]) return r.fulfill({ json: data[t] });
+    const pid = (u.searchParams.get('person_id') || '').replace(/^eq\./, '');
+    if (m === 'GET' && data[t]) return r.fulfill({ json: pid ? data[t].filter(x => x.person_id === pid) : data[t] });
     return r.fulfill({ json: m === 'GET' ? [] : null });
   });
   const out = process.argv[2] || '.';
@@ -76,6 +78,8 @@ const data = {
   await step('Leute', async () => { await p.click('#nav >> text=Leute'); await has('Muster', 'Rangliste Umsatz', 'QR-Code'); if (!(await p.$('.qr img'))) throw new Error('QR fehlt'); });
   await step('Leute: neuer QR-Code', async () => { await p.click('[data-a="a-newcode"]'); await p.waitForSelector('text=Neuen QR-Code erzeugen?'); await p.click('#mform button.pri'); await closed(); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('Neuer QR-Code erzeugt'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('settings') && c.includes('kiosk_code_at'))) throw new Error('nicht gespeichert'); });
   await step('Leute: Guthaben-Anzeige', async () => { await has('Guthaben 18,50', 'Einzahlung'); });
+  await step('Leute: Auszahlung', async () => { await p.click('[data-a="a-payout"]'); await p.waitForSelector('text=Auszahlung an Beispiel'); if (await p.inputValue('#f_c') !== '18,50') throw new Error('Vorschlag ' + await p.inputValue('#f_c')); await p.click('#mform button.pri'); await closed(); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('Ausgezahlt: 18,50'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('a_payout'))) throw new Error('nicht gebucht'); });
+  await step('Info-Knopf', async () => { const n = (await p.$$('[data-a="info"]')).length; if (n < 3) throw new Error('nur ' + n); await p.click('[data-a="info"] >> nth=0'); await p.waitForSelector('#modal:not([hidden]) >> text=Offener Betrag'); await p.click('[data-a="m-close"]'); await closed(); });
   await step('Leute: Zahlung', async () => { await p.click('[data-a="a-pay"] >> nth=0'); await p.fill('#f_c', '2,50'); await p.click('#mform button.pri'); await closed(); });
   await p.screenshot({ path: out + '/a-leute.png', fullPage: true });
   console.log('Schreibzugriffe:'); calls.forEach(c => console.log('  ', c));

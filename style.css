@@ -85,3 +85,7 @@ textarea{min-height:120px;resize:vertical}
   .qr img{max-width:110mm}
   .logo{font-size:34pt}
 }
+.ii{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;padding:0;border:1px solid var(--dash);border-radius:50%;
+  background:none;color:var(--mut);font:inherit;font-size:11px;font-weight:700;line-height:1;cursor:pointer;vertical-align:1px;text-transform:none;letter-spacing:0}
+.ii::after{content:"";position:absolute;inset:-13px}
+.ii{position:relative}
