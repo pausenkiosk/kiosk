@@ -125,3 +125,5 @@ textarea{min-height:120px;resize:vertical}
 body.hascart{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
 .express-cta{align-items:center;flex-wrap:nowrap;margin-bottom:12px}
 .express-cta .btn{flex:1}
+.tscroll{overflow-x:auto;margin:0 -2px}
+.tscroll table{min-width:300px}

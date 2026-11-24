@@ -69,7 +69,7 @@ const data = {
     if (!vis || nav) throw new Error('Druckansicht: Preisliste ' + vis + ', Leiste ' + nav); });
   await step('Regal: Foto-Vorschlag prüfen', async () => { await p.click('[data-a="a-job"]'); await has('Foto 7', 'Twix verdeckt'); const v = await p.inputValue('[data-cnt="p1"]'); if (v !== '7') throw new Error('Wert ' + v); await p.click('text=Zählung speichern'); await p.waitForSelector('[data-a="a-cnt"]'); });
   await step('Regal: Produkt bearbeiten', async () => { await p.click('button.it:has-text("Cola")'); await p.fill('#f_price', '1,20'); await p.click('#mform button.pri'); await closed(); });
-  await step('Regal: Produkt löschen', async () => { await p.click('button.it:has-text("Alt")'); await p.selectOption('#f_active', 'del'); await p.click('#mform button.pri'); await p.waitForSelector('text=endgültig löschen?'); await p.click('#mform button.pri'); await closed(); });
+  await step('Regal: Produkt löschen', async () => { await p.waitForTimeout(600); await p.click('button.it:has-text("Alt")'); await p.selectOption('#f_active', 'del'); await p.click('#mform button.pri'); await p.waitForSelector('text=endgültig löschen?'); await p.click('#mform button.pri'); await closed(); });
   await step('Einkauf', async () => { await p.click('#nav >> text=Einkauf'); await has('Einkauf per Foto oder Ansage', 'Vorschlag liegt vor', 'wartet auf Auswertung', 'Haltbarkeit'); });
   await p.screenshot({ path: out + '/a-einkauf.png', fullPage: true });
   await step('Einkauf: Vorschlag prüfen und speichern', async () => {
@@ -81,6 +81,7 @@ const data = {
   });
   await step('Einkauf ansagen', async () => { await p.click('text=Einkauf ansagen'); await p.fill('#f_t', 'Bei Rewe 12 Cola für 9,48'); await p.click('#mform button.pri'); await closed(); });
   await step('Kasse', async () => { await p.click('#nav >> text=Kasse'); await has('Einnahmen und Ausgaben', 'Verkauf letzte 4 Wochen', 'Letzte Buchungen'); await p.click('.seg >> text=Woche'); await p.click('.seg >> text=Jahr'); await has('2025'); });
+  await step('Kasse: Ein- und Verkaufspreise', async () => { await has('Ein- und Verkaufspreise', 'Warenwert im Regal'); const tx = await p.textContent('#app'); if (!/Cola\s*0,60\s*1,00\s*0,40\s*40/.test(tx.replace(/\s+/g, ' '))) throw new Error('Zeile Cola falsch'); });
   await step('Kasse: Kassensturz', async () => { await p.click('[data-a="a-cash"]'); await p.fill('#f_c', '18,20'); await p.click('#mform button.pri'); await closed(); await p.waitForFunction(() => { const t = document.querySelector('#toast').textContent; return t.includes('13,20 € Barverkäufe') && t.includes('5,00 €'); }, null, { timeout: 5000 }); });
   await step('Kasse: Storno', async () => { await p.waitForSelector('[data-a="a-storno"]'); const n = (await p.$$('[data-a="a-storno"]')).length; if (n !== 2) throw new Error('Storno-Knöpfe: ' + n); await p.click('[data-a="a-storno"] >> nth=0'); await p.waitForSelector('text=Buchung stornieren?'); await p.click('#mform button.pri'); await closed(); });
   await step('Leute', async () => { await p.click('#nav >> text=Leute'); await has('Muster', 'Rangliste Umsatz', 'QR-Code'); if (!(await p.$('.qr img'))) throw new Error('QR fehlt'); });
