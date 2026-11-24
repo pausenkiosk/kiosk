@@ -63,6 +63,9 @@ const data = {
   await step('Bon: Kiosk-Express und Adventskalender', async () => { await has('Kiosk-Express (1)', 'Büro 2.14', '3 × Cola', 'Adventskalender', 'Muster gewinnt Twix');
     await p.click('[data-a="a-del"][data-s="geliefert"]'); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('geliefert'), null, { timeout: 5000 });
     if (!calls.some(c => c.includes('a_delivery') && c.includes('geliefert'))) throw new Error('Status nicht gesendet'); });
+  await step('Bon: Kiosk-Express ausschalten', async () => { await has('Kiosk-Express liefert heute'); await p.click('[data-a="a-express"]');
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('hat frei'), null, { timeout: 5000 });
+    if (!calls.some(c => c.includes('settings') && c.includes('liefer_aktiv') && c.includes('"0"'))) throw new Error('nicht gespeichert'); });
   await step('Regal', async () => { await p.click('#nav >> text=Regal'); await has('Cola', 'Alt', 'Vorschlag liegt vor', 'Wünsche der Kollegen', 'Mehr Eistee', '3×', 'Ampel', 'Preisliste drucken', 'Preisliste · Stand');
     if (await p.isVisible('.sheet.printonly')) throw new Error('Preisliste am Bildschirm sichtbar');
     await p.emulateMedia({ media: 'print' }); const vis = await p.isVisible('.sheet.printonly'), nav = await p.isVisible('#nav'); await p.emulateMedia({ media: 'screen' });

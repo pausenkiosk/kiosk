@@ -127,3 +127,4 @@ body.hascart{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
 .express-cta .btn{flex:1}
 .tscroll{overflow-x:auto;margin:0 -2px}
 .tscroll table{min-width:300px}
+.express-off{border:1.5px dashed var(--dash);border-radius:8px;padding:8px 10px;margin:8px 0 12px}

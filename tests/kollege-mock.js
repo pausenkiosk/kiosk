@@ -9,7 +9,7 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
 
 (async () => {
   const b = await chromium.launch();
-  let failed = 0; const buys = []; let delState = null;
+  let failed = 0; const buys = []; let delState = null; let lieferAn = true;
   const out = process.argv[2] || '.';
   const run = async (title, n, preset, fn) => {
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
@@ -23,6 +23,7 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
       if (u.includes('rpc/k_state')) return r.fulfill({ json: state });
       if (u.includes('rpc/k_buy')) { buys.push(r.request().postData()); return r.fulfill({ json: { ok: true } }); }
       if (u.includes('rpc/k_delivery')) return r.fulfill({ json: delState });
+      if (u.includes('rpc/k_info')) return r.fulfill({ json: { liefer_aktiv: lieferAn } });
       if (u.includes('rpc/k_deliver')) { buys.push('DELIVER ' + r.request().postData()); return r.fulfill({ json: { ok: true, summe: 300, advent: { tag: 7, gewonnen: true, produkt: 'Knoppers' } } }); }
       if (u.includes('rpc/k_rate')) { buys.push('RATE ' + r.request().postData()); delState = { ...delState, rating: 4, tip: '10cent' }; return r.fulfill({ json: true }); }
       return r.fulfill({ json: null });
@@ -118,6 +119,13 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
     await p.screenshot({ path: (process.argv[2] || '.') + '/k-advent.png' });
     await p.click('[data-a="m-close"]'); if (await p.$('#cartbar')) throw new Error('Lieferkorb bleibt offen');
   });
+  lieferAn = false;
+  await run('Kiosk-Express ausgeschaltet: Hinweis statt Knopf', 5, { kcode: 'c', ktoken: 'tok' }, async p => {
+    await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Deine Buchungen');
+    if (await p.$('[data-a="k-cart"]')) throw new Error('Lieferknopf trotz Pause');
+    if (!(await p.$('.express-off'))) throw new Error('kein Hinweis');
+  });
+  lieferAn = true;
   delState = { id: 'd1', status: 'geliefert', rating: null, tip: null, total_cents: 300 };
   await run('Kiosk-Express: Bewertung mit Trinkgeld', 5, { kcode: 'c', ktoken: 'tok' }, async p => {
     await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Wie war die Lieferung?');
