@@ -93,3 +93,5 @@ textarea{min-height:120px;resize:vertical}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
 .it.pers{grid-template-columns:12px 1fr auto;row-gap:4px;border-bottom:1px dotted var(--dash);padding:8px 0}
 .it.pers .acts{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:6px;text-align:left}
+.qty{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0 14px}
+.qty .btn{padding:12px 0;font-size:18px}

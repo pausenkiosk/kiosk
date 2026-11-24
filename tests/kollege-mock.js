@@ -9,7 +9,7 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
 
 (async () => {
   const b = await chromium.launch();
-  let failed = 0;
+  let failed = 0; const buys = [];
   const out = process.argv[2] || '.';
   const run = async (title, n, preset, fn) => {
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
@@ -21,6 +21,7 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
       if (u.includes('rpc/k_names')) return r.fulfill({ json: names(n) });
       if (u.includes('rpc/k_login')) return r.fulfill({ json: { ok: true, token: 'tok' } });
       if (u.includes('rpc/k_state')) return r.fulfill({ json: state });
+      if (u.includes('rpc/k_buy')) { buys.push(r.request().postData()); return r.fulfill({ json: { ok: true } }); }
       return r.fulfill({ json: null });
     });
     try { await fn(p, ctx); if (errs.length) throw new Error('Konsole: ' + errs.join(' | ')); console.log('ok  ', title); }
@@ -72,6 +73,20 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
     await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Wer bist du?');
     if (await p.$('text=Weiter als Weg')) throw new Error('alter Name angezeigt');
     if (await p.evaluate(() => localStorage.getItem('kfav'))) throw new Error('nicht verworfen');
+  });
+  await run('Anschreiben: Anzahl per Knopf, Buchen-Knopf frei', 5, { kcode: 'c', ktoken: 'tok' }, async p => {
+    await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Deine Buchungen');
+    await p.click('button.it:has-text("Cola")'); await p.waitForSelector('.qty');
+    if (await p.$('#modal select')) throw new Error('noch Auswahlliste');
+    await p.click('.qty [data-q="3"]'); await p.waitForSelector('#modal >> text=3,00 €');
+    const q = await p.$('.qty').then(e => e.boundingBox()), ok = await p.$('[data-q="ok"]').then(e => e.boundingBox());
+    if (q.y + q.height > ok.y) throw new Error('Anzahl überlappt den Buchen-Knopf');
+    await p.screenshot({ path: (process.argv[2] || '.') + '/k-kauf.png' });
+    const n = buys.length; await p.click('[data-q="ok"]'); await p.waitForSelector('#modal', { state: 'hidden' });
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('angeschrieben'), null, { timeout: 5000 });
+    if (!buys.slice(n).some(x => x.includes('"p_qty":3'))) throw new Error('falsche Menge: ' + buys.slice(n));
+    await p.click('button.it:has-text("Cola")'); await p.click('[data-q="x"]'); await p.waitForSelector('#modal', { state: 'hidden' });
+    if (buys.length !== n + 1) throw new Error('Abbrechen hat gebucht');
   });
   await b.close();
   process.exit(failed ? 1 : 0);

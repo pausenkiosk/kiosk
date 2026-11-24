@@ -28,7 +28,7 @@ const head = sub => `<p class="ctr"><span class="logo">KIOSK</span><span class="
 const rpc = async (fn, args) => { const { data, error } = await SB.rpc(fn, args); if (error) throw error; return data; };
 const ok = r => { if (r.error) throw r.error; return r.data; };
 
-const INFO = {"k_saldo": "Dein Schuldschein ist wie ein kleines Konto. Was du anschreibst, kommt dazu. Gibst du dem Betreiber Geld, wird es abgezogen. Gibst du mehr, als offen ist, hast du Guthaben, von dem deine nächsten Einkäufe abgehen.", "k_buy": "Produkt antippen und Anzahl wählen. Der Betrag landet auf deinem Schuldschein. Angezeigt wird, was laut App im Regal liegt. Fehlt etwas, das du vor dir siehst, sag dem Betreiber Bescheid oder zahle bar.", "k_entries": "Hier stehen deine letzten 30 Buchungen mit Datum. Einen Kauf kannst du 5 Minuten lang zurücknehmen, falls du dich vertippt hast. Danach hilft der Betreiber.", "k_wish": "Dein Wunsch geht ohne deinen Namen an den Betreiber. Wünschen mehrere dasselbe, wird es zusammengezählt.", "kasse": "Kassenstand: alle Einnahmen minus alle Ausgaben seit Beginn, auch die Einkäufe, die du aus eigener Tasche bezahlt hast. Ein Minus heißt: Der Kiosk schuldet dir noch Geld.", "fehl": "Fehlbetrag: Ware, die zwischen den letzten beiden Kassenstürzen laut Zählung ohne Buchung verschwunden ist, minus das Bargeld für Barverkäufe beim letzten Kassensturz. Plus heißt, es fehlt Geld oder Ware; nahe 0 ist gut.", "ampel": "Die Ampel richtet sich danach, wie lange der Bestand noch reicht: Bestand geteilt durch den Verkauf pro Woche der letzten 4 Wochen. Ein Ladenhüter mit 4 Stück kann grün sein, ein Renner mit 10 Stück rot.", "mhd": "Haltbarkeit: Gelb ab 30 Tagen vor Ablauf, damit noch Zeit für einen Abverkaufspreis bleibt. Rot bei weniger als 14 Tagen und wenn es abgelaufen ist.", "claude": "Was du hier schreibst, liest Claude werktags um 10:13 und 14:13 Uhr. Daten und Fragen erledigt Claude direkt, Änderungen an der App gehen an die Programmierung. Schuldscheine, Löschen und Sicherheit nur nach Rückfrage.", "backup": "Lädt alle Kiosk-Daten als Datei auf dein Gerät: Produkte, Buchungen, Schuldscheine, Zählungen, Wünsche und offene Aufträge, ohne PINs, ohne QR-Code und ohne Fotos. Zusätzlich legt Claude jeden Freitag eine Sicherung in dein Google Drive.", "zaehlen": "Trag ein, was wirklich im Regal liegt. Was seit der letzten Zählung ohne Buchung fehlt, zählt als Barverkauf oder Schwund und fließt in den Fehlbetrag. Am besten direkt vor einem Kassensturz zählen.", "fotos": "Fotos vom Regal oder von einzelnen Produkten mit Haltbarkeitsdatum, bis zu 60 auf einmal. Claude zählt bzw. liest die Daten und legt einen Vorschlag ab, den du mit „Prüfen“ bestätigst.", "wuensche": "Wünsche der Kollegen, ohne Namen. Die Zahl zeigt, wie viele dasselbe wollen. „Erledigt“ nimmt den Wunsch aus der Liste.", "einkauf": "Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag; gebucht wird erst, wenn du ihn prüfst und speicherst.", "kassensturz": "Kassensturz geht, wann immer du willst, ohne festen Rhythmus: Kasse leeren, Geld zählen, Betrag eintragen. Einzahlungen und Auszahlungen seit dem letzten Kassensturz rechnet die App heraus, der Rest zählt als Barverkauf.", "storno": "Storno nimmt eine eigene Eingabe zurück: Buchung von Hand, Einkauf (samt Bestand) oder den letzten Kassensturz. Einzahlungen korrigierst du unter Leute.", "schuldscheine": "Rot mit Minus: Schulden. Grün: Guthaben. Einzahlung: Geld, das du bekommen hast; über den offenen Betrag hinaus wird es Guthaben. Auszahlung: Guthaben bar zurückgeben. Lampe grün: hat zugestimmt, leer: noch nicht angemeldet oder nicht zugestimmt, rot: gerade gesperrt.", "rangliste": "Umsatz pro Person aus Käufen per Schuldschein, ohne Einzahlungen. Welche Produkte jemand kauft, wird nicht gespeichert.", "qr": "Über diesen Code melden sich Kollegen an. Ein neuer Code macht den alten sofort ungültig; wer angemeldet ist, bleibt es. Ab 30 Tagen erinnert die Startseite.", "next3": "Die drei Produkte, deren Haltbarkeitsdatum als Nächstes erreicht wird, egal wie weit es noch hin ist. Bereits Abgelaufenes steht weiter oben in Rot."};
+const INFO = {"k_saldo": "Dein Schuldschein ist wie ein kleines Konto. Was du anschreibst, kommt dazu. Gibst du dem Betreiber Geld, wird es abgezogen. Gibst du mehr, als offen ist, hast du Guthaben, von dem deine nächsten Einkäufe abgehen.", "k_buy": "Produkt antippen und Anzahl wählen. Der Betrag landet auf deinem Schuldschein. Angezeigt wird, was laut App im Regal liegt. Fehlt etwas, das du vor dir siehst, sag dem Betreiber Bescheid oder zahle bar.", "k_entries": "Hier stehen deine letzten 30 Buchungen mit Datum. Einen Kauf kannst du 5 Minuten lang zurücknehmen, falls du dich vertippt hast. Danach hilft der Betreiber.", "k_wish": "Dein Wunsch geht ohne deinen Namen an den Betreiber. Wünschen mehrere dasselbe, wird es zusammengezählt.", "kasse": "Kassenstand: alle Einnahmen minus alle Ausgaben seit Beginn, auch die Einkäufe, die du aus eigener Tasche bezahlt hast. Ein Minus heißt: Der Kiosk schuldet dir noch Geld.", "fehl": "Abgleich Ware/Kasse: Was laut Zählung ohne Buchung aus dem Regal verschwunden ist, hätte bar bezahlt werden müssen. Die App vergleicht diesen Warenwert mit den Barverkäufen des letzten Kassensturzes. „fehlen“ heißt: weniger Geld als Ware, „mehr in der Kasse“: mehr Geld als Ware. Das geht nur, wenn du zwischen zwei Kassenstürzen unter Regal gezählt hast, am besten direkt vor dem Kassensturz.", "ampel": "Die Ampel richtet sich danach, wie lange der Bestand noch reicht: Bestand geteilt durch den Verkauf pro Woche der letzten 4 Wochen. Ein Ladenhüter mit 4 Stück kann grün sein, ein Renner mit 10 Stück rot.", "mhd": "Haltbarkeit: Gelb ab 30 Tagen vor Ablauf, damit noch Zeit für einen Abverkaufspreis bleibt. Rot bei weniger als 14 Tagen und wenn es abgelaufen ist.", "claude": "Was du hier schreibst, liest Claude werktags um 10:13 und 14:13 Uhr. Daten und Fragen erledigt Claude direkt, Änderungen an der App gehen an die Programmierung. Schuldscheine, Löschen und Sicherheit nur nach Rückfrage.", "backup": "Lädt alle Kiosk-Daten als Datei auf dein Gerät: Produkte, Buchungen, Schuldscheine, Zählungen, Wünsche und offene Aufträge, ohne PINs, ohne QR-Code und ohne Fotos. Zusätzlich legt Claude jeden Freitag eine Sicherung in dein Google Drive.", "zaehlen": "Trag ein, was wirklich im Regal liegt. Was seit der letzten Zählung ohne Buchung fehlt, zählt als Barverkauf oder Schwund und fließt in den Fehlbetrag. Am besten direkt vor einem Kassensturz zählen.", "fotos": "Fotos vom Regal oder von einzelnen Produkten mit Haltbarkeitsdatum, bis zu 60 auf einmal. Claude zählt bzw. liest die Daten und legt einen Vorschlag ab, den du mit „Prüfen“ bestätigst.", "wuensche": "Wünsche der Kollegen, ohne Namen. Die Zahl zeigt, wie viele dasselbe wollen. „Erledigt“ nimmt den Wunsch aus der Liste.", "einkauf": "Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag; gebucht wird erst, wenn du ihn prüfst und speicherst.", "kassensturz": "Kassensturz geht, wann immer du willst, ohne festen Rhythmus: Kasse leeren, Geld zählen, Betrag eintragen. Einzahlungen und Auszahlungen seit dem letzten Kassensturz rechnet die App heraus, der Rest zählt als Barverkauf.", "storno": "Storno nimmt eine eigene Eingabe zurück: Buchung von Hand, Einkauf (samt Bestand) oder den letzten Kassensturz. Einzahlungen korrigierst du unter Leute.", "schuldscheine": "Rot mit Minus: Schulden. Grün: Guthaben. Einzahlung: Geld, das du bekommen hast; über den offenen Betrag hinaus wird es Guthaben. Auszahlung: Guthaben bar zurückgeben. Lampe grün: hat zugestimmt, leer: noch nicht angemeldet oder nicht zugestimmt, rot: gerade gesperrt.", "rangliste": "Umsatz pro Person aus Käufen per Schuldschein, ohne Einzahlungen. Welche Produkte jemand kauft, wird nicht gespeichert.", "qr": "Über diesen Code melden sich Kollegen an. Ein neuer Code macht den alten sofort ungültig; wer angemeldet ist, bleibt es. Ab 30 Tagen erinnert die Startseite.", "next3": "Die drei Produkte, deren Haltbarkeitsdatum als Nächstes erreicht wird, egal wie weit es noch hin ist. Bereits Abgelaufenes steht weiter oben in Rot."};
 const ii = k => `<button type="button" class="ii noprint" data-a="info" data-k="${k}" aria-label="Erklärung">i</button>`;
 let toastT;
 function toast(msg) {
@@ -178,9 +178,25 @@ const kActs = {
   'k-logout': async () => { await rpc('k_logout', { p_token: K.token }); LS.del('ktoken'); K.token = null; K.st = null; await kBoot(); },
   'k-buy': async el => {
     const p = K.st.products.find(x => x.id === el.dataset.id);
-    const v = await ask(p.name, [{ k: 'qty', label: `Anzahl (je ${eur(p.cents)} €)`, type: 'select', options: [1, 2, 3, 4, 5].map(n => [n, `${n} × = ${eur(n * p.cents)} €`]) }], 'Anschreiben');
-    if (!v) return;
-    const r = await rpc('k_buy', { p_token: K.token, p_product: p.id, p_qty: Number(v.qty) });
+    const qty = await new Promise(res => {
+      let n = 1;
+      const draw = () => {
+        modal.innerHTML = `<div class="paper"><h2>${esc(p.name)}</h2><p class="small mut">Wie viele? Je ${eur(p.cents)} €</p>
+          <div class="qty">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="btn${i === n ? ' pri' : ''}" data-q="${i}" aria-pressed="${i === n}">${i}</button>`).join('')}</div>
+          ${ln('Zusammen', eur(n * p.cents) + ' €', 'big')}
+          <div class="row"><button type="button" class="btn" data-q="x">Abbrechen</button><button type="button" class="btn pri" data-q="ok">Anschreiben</button></div></div>`;
+      };
+      draw(); modal.hidden = false;
+      modal.onclick = e => {
+        const b = e.target.closest('[data-q]'); if (!b) return;
+        e.stopPropagation();
+        const q = b.dataset.q;
+        if (q === 'x' || q === 'ok') { modal.onclick = null; modal.hidden = true; modal.innerHTML = ''; res(q === 'ok' ? n : 0); }
+        else { n = Number(q); draw(); }
+      };
+    });
+    if (!qty) return;
+    const r = await rpc('k_buy', { p_token: K.token, p_product: p.id, p_qty: qty });
     toast(r.ok ? `${p.name} angeschrieben. 5 Minuten lang rückgängig möglich.` : 'Buchung nicht möglich.');
     await kReload();
   },
@@ -295,11 +311,14 @@ function vBon() {
   const saldi = {}; d.ledger.forEach(l => { saldi[l.person_id] = (saldi[l.person_id] || 0) + l.amount_cents; });
   const offen = Object.values(saldi).filter(v => v > 0).reduce((a, v) => a + v, 0);
   const guthaben = -Object.values(saldi).filter(v => v < 0).reduce((a, v) => a + v, 0);
-  let fehl = '–';
+  let fehl = '<span class="mut">vor dem Kassensturz zählen</span>';
   if (d.cash.length >= 2) { // erst ab dem zweiten Kassensturz gibt es einen Anfangspunkt
-    const to = new Date(d.cash[0].at).getTime(), from = d.cash[1] ? new Date(d.cash[1].at).getTime() : 0;
-    const ware = d.sales.filter(s => s.kind === 'zaehlung' && new Date(s.at) < to && new Date(s.at) >= from).reduce((a, s) => a + s.cents, 0);
-    fehl = eur(ware - (d.cash[0].bar_cents ?? d.cash[0].cents));
+    const to = new Date(d.cash[0].at).getTime(), from = new Date(d.cash[1].at).getTime();
+    const z = d.sales.filter(s => s.kind === 'zaehlung' && new Date(s.at) < to && new Date(s.at) >= from);
+    if (z.length) {
+      const diff = z.reduce((a, s) => a + s.cents, 0) - (d.cash[0].bar_cents ?? d.cash[0].cents);
+      fehl = diff > 0 ? `<span class="neg">fehlen ${eur(diff)}</span>` : diff < 0 ? `mehr in der Kasse ${eur(-diff)}` : 'stimmt';
+    }
   }
   const act = d.products.filter(p => p.active);
   const list = (ps, f) => ps.map(p => `<div class="it"><i class="lamp ${p.lamp}"></i><span>${esc(p.name)}</span><span>${p.stock} St</span><span>${f(p)}</span></div>`).join('');
@@ -315,7 +334,7 @@ function vBon() {
     ${ln('Ausgaben Monat', eur(sum(j => j.day.startsWith(ym), 'out_cents')))}
     ${ln('Offene Schuldscheine', eur(offen))}
     ${guthaben ? ln('Guthaben der Kollegen', eur(guthaben)) : ''}
-    ${ln('Fehlbetrag letzte Zählung ' + ii('fehl'), fehl)}
+    ${ln('Abgleich Ware/Kasse ' + ii('fehl'), fehl)}
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
     ${(() => { const a = d.set.kiosk_code_at ? Math.floor((t - pd(d.set.kiosk_code_at)) / 864e5) : 0;
       return a >= 30 ? `<hr><h2>QR-Code erneuern</h2><p class="small">Der QR-Code am Kiosk ist ${a} Tage alt. Unter Leute einen neuen erzeugen und den Aushang neu drucken.</p><div class="row"><button class="btn sm" data-a="a-tab" data-t="leute">Zu Leute</button></div>` : ''; })()}
