@@ -9,7 +9,7 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
 
 (async () => {
   const b = await chromium.launch();
-  let failed = 0; const buys = [];
+  let failed = 0; const buys = []; let delState = null;
   const out = process.argv[2] || '.';
   const run = async (title, n, preset, fn) => {
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
@@ -22,6 +22,9 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
       if (u.includes('rpc/k_login')) return r.fulfill({ json: { ok: true, token: 'tok' } });
       if (u.includes('rpc/k_state')) return r.fulfill({ json: state });
       if (u.includes('rpc/k_buy')) { buys.push(r.request().postData()); return r.fulfill({ json: { ok: true } }); }
+      if (u.includes('rpc/k_delivery')) return r.fulfill({ json: delState });
+      if (u.includes('rpc/k_deliver')) { buys.push('DELIVER ' + r.request().postData()); return r.fulfill({ json: { ok: true, summe: 300, advent: { tag: 7, gewonnen: true, produkt: 'Knoppers' } } }); }
+      if (u.includes('rpc/k_rate')) { buys.push('RATE ' + r.request().postData()); delState = { ...delState, rating: 4, tip: '10cent' }; return r.fulfill({ json: true }); }
       return r.fulfill({ json: null });
     });
     try { await fn(p, ctx); if (errs.length) throw new Error('Konsole: ' + errs.join(' | ')); console.log('ok  ', title); }
@@ -92,11 +95,35 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
     await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Deine Buchungen');
     await p.click('[data-a="k-view"][data-v="kacheln"]'); await p.waitForSelector('.tile');
     if (await p.$('.tile:has-text("Fanta")')) throw new Error('leeres Produkt als Kachel');
-    if (!(await p.$('.tile svg'))) throw new Error('kein Bild');
+    if (!(await p.$('.tile svg, .tile img'))) throw new Error('kein Bild');
     await p.reload(); await p.waitForSelector('.tile');
     await p.click('.tile:has-text("Cola")'); await p.waitForSelector('.qty'); await p.click('[data-q="ok"]'); await p.waitForSelector('#modal', { state: 'hidden' });
     await p.click('[data-a="k-view"][data-v="liste"]'); await p.waitForSelector('button.it:has-text("Cola")');
     if (await p.evaluate(() => localStorage.getItem('kview')) !== 'liste') throw new Error('Ansicht nicht gemerkt');
+  });
+  await run('Kiosk-Express: Lieferkorb, Mindestwert, Bestellung, Adventsgewinn', 5, { kcode: 'c', ktoken: 'tok', kview: 'kacheln' }, async p => {
+    await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Deine Buchungen');
+    await p.click('[data-a="k-cart"]'); await p.waitForSelector('#cartbar');
+    await p.click('.tile:has-text("Cola")'); await p.click('.qty [data-q="2"]'); await p.click('[data-q="ok"]');
+    await p.waitForSelector('#cartbar >> text=2,00 €');
+    if (!(await p.$('#cartbar [data-a="k-cart-ok"][disabled]'))) throw new Error('Bestellen trotz unter 3 € möglich');
+    await p.waitForSelector('#cartbar >> text=steht der Lieferant nicht auf');
+    await p.click('.tile:has-text("Cola")'); await p.click('[data-q="ok"]');
+    await p.waitForSelector('#cartbar [data-a="k-cart-ok"]:not([disabled])');
+    await p.screenshot({ path: (process.argv[2] || '.') + '/k-express.png' });
+    await p.click('[data-a="k-cart-ok"]'); await p.fill('#f_o', '2.14'); await p.click('#mform button.pri');
+    await p.waitForSelector('text=Gewonnen!');
+    if (!buys.some(x => x.startsWith('DELIVER') && x.includes('"qty":3') && x.includes('2.14'))) throw new Error('Bestellung falsch: ' + buys.join(' | '));
+    if (await p.evaluate(() => localStorage.getItem('kbuero')) !== '2.14') throw new Error('Büro nicht gemerkt');
+    await p.screenshot({ path: (process.argv[2] || '.') + '/k-advent.png' });
+    await p.click('[data-a="m-close"]'); if (await p.$('#cartbar')) throw new Error('Lieferkorb bleibt offen');
+  });
+  delState = { id: 'd1', status: 'geliefert', rating: null, tip: null, total_cents: 300 };
+  await run('Kiosk-Express: Bewertung mit Trinkgeld', 5, { kcode: 'c', ktoken: 'tok' }, async p => {
+    await p.goto('http://localhost:8765/'); await p.waitForSelector('text=Wie war die Lieferung?');
+    await p.click('[data-a="k-rate"][data-v="4"]'); await p.click('[data-a="k-tip"][data-v="10cent"]'); await p.click('[data-a="k-rate-ok"]');
+    await p.waitForSelector('text=Danke für 4 von 5 Schokoriegeln');
+    if (!buys.some(x => x.startsWith('RATE') && x.includes('"p_rating":4') && x.includes('10cent'))) throw new Error('Bewertung falsch');
   });
   await b.close();
   process.exit(failed ? 1 : 0);

@@ -16,8 +16,10 @@ const data = {
   purchase_items: [{ id: 'm1', qty: 6, mhd: day(5), product_id: 'p2' }, { id: 'm2', qty: 0, mhd: day(22), product_id: 'p1' }, { id: 'm3', qty: 0, mhd: day(200), product_id: 'p1' }],
   alerts: [{ id: 'al', at: ago(0), text: 'Anmeldung von Beispiel nach 3 falschen PINs für 1 Stunde gesperrt' }],
   cash_counts: [{ day: day(0), cents: 1820, bar_cents: 1500, at: ago(0) }],
-  settings: [{ key: 'kiosk_code', value: 'abc123' }, { key: 'backup_at', value: day(-20) }, { key: 'kiosk_code_at', value: day(-45) }],
+  settings: [{ key: 'kiosk_code', value: 'abc123' }, { key: 'backup_at', value: day(-20) }, { key: 'kiosk_code_at', value: day(-45) }, { key: 'advent_von', value: day(-3) }, { key: 'advent_bis', value: day(20) }],
   wishes: [{ id: 'w1', text: 'Mehr Eistee', created_at: '2026-11-24T08:00:00Z', wish_votes: [{ count: 3 }] }],
+  deliveries: [{ id: 'd1', person_id: 'a', office: '2.14', items: [{ name: 'Cola', qty: 3 }], total_cents: 300, status: 'neu', rating: null, tip: null, created_at: ago(0) }],
+  advent_wins: [{ day: day(0), person_id: 'a', product_id: 'p2' }],
   requests: [{ id: 'r1', at: ago(0), text: 'Bitte Knopf größer', status: 'neu', answer: null }, { id: 'r2', at: ago(0), text: '8 Produktfotos', status: 'erledigt', answer: 'Eingetragen.' }],
   photo_jobs: [
     { id: 'j1', at: ago(0), paths: ['x'], status: 'vorschlag', result: [{ id: 'p1', qty: 7 }], note: 'Twix verdeckt', kind: 'foto', text: null },
@@ -41,6 +43,7 @@ const data = {
     if (u.pathname.includes('/rpc/a_storno')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_payout')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_cleanup')) return r.fulfill({ json: null });
+    if (u.pathname.includes('/rpc/a_delivery')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_fix')) return r.fulfill({ json: null });
     if (u.pathname.includes('/storage/v1/object/list')) return r.fulfill({ json: [] });
     if (u.pathname.includes('/auth/')) return r.fulfill({ json: {} });
@@ -57,6 +60,9 @@ const data = {
   await p.goto('http://localhost:8765/#verwaltung');
   await step('Bon', async () => { await p.waitForSelector('text=KASSENSTAND', { timeout: 8000 }); await has('Läuft in 14 Tagen ab (1)', 'Läuft in 30 Tagen ab (1)', 'Unter Einkaufspreis (1)', 'Hinweise', 'Nachbestellen', 'Bitte jetzt sichern', 'An Claude', 'Guthaben der Kollegen', '18,50', 'Läuft als Nächstes ab', 'QR-Code erneuern', '45 Tage alt'); });
   await p.screenshot({ path: out + '/a-bon.png', fullPage: true });
+  await step('Bon: Kiosk-Express und Adventskalender', async () => { await has('Kiosk-Express (1)', 'Büro 2.14', '3 × Cola', 'Adventskalender', 'Muster gewinnt Twix');
+    await p.click('[data-a="a-del"][data-s="geliefert"]'); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('geliefert'), null, { timeout: 5000 });
+    if (!calls.some(c => c.includes('a_delivery') && c.includes('geliefert'))) throw new Error('Status nicht gesendet'); });
   await step('Regal', async () => { await p.click('#nav >> text=Regal'); await has('Cola', 'Alt', 'Vorschlag liegt vor', 'Wünsche der Kollegen', 'Mehr Eistee', '3×', 'Ampel', 'Preisliste drucken', 'Preisliste · Stand');
     if (await p.isVisible('.sheet.printonly')) throw new Error('Preisliste am Bildschirm sichtbar');
     await p.emulateMedia({ media: 'print' }); const vis = await p.isVisible('.sheet.printonly'), nav = await p.isVisible('#nav'); await p.emulateMedia({ media: 'screen' });
@@ -91,6 +97,8 @@ const data = {
     await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('zuerst eine Aktion'), null, { timeout: 5000 }); if (calls.slice(n).some(c => c.includes('a_fix'))) throw new Error('gebucht'); });
   await step('Leute: hoher Betrag fragt nach', async () => { const n = calls.length; await p.click('[data-a="a-more"] >> nth=0'); await p.selectOption('#f_a', 'schuld'); await p.fill('#f_x', '4711'); await p.click('#mform button.pri');
     await p.waitForSelector('text=ungewöhnlich hoher Betrag'); await p.click('[data-a="m-x"]'); await closed(); if (calls.slice(n).some(c => c.includes('a_fix'))) throw new Error('trotz Abbruch gebucht'); });
+  await step('Leute: Benachrichtigung einrichten', async () => { await has('Benachrichtigung'); await p.click('[data-a="a-ntfy"]'); await p.waitForSelector('text=Neuen Kanal erzeugen'); await p.click('#mform button.pri'); await closed();
+    await p.waitForFunction(() => true); await p.waitForTimeout(300); if (!calls.some(c => c.includes('settings') && c.includes('ntfy_topic') && /kiosk-[0-9a-f]{24}/.test(c))) throw new Error('Kanal nicht gespeichert'); });
   await step('Leute: Zahlung', async () => { await p.click('[data-a="a-pay"] >> nth=0'); await p.fill('#f_c', '2,50'); await p.click('#mform button.pri'); await closed(); });
   await p.screenshot({ path: out + '/a-leute.png', fullPage: true });
   console.log('Schreibzugriffe:'); calls.forEach(c => console.log('  ', c));

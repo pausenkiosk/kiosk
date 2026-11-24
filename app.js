@@ -28,11 +28,12 @@ const head = sub => `<p class="ctr"><span class="logo">KIOSK</span><span class="
 const rpc = async (fn, args) => { const { data, error } = await SB.rpc(fn, args); if (error) throw error; return data; };
 const ok = r => { if (r.error) throw r.error; return r.data; };
 
-const INFO = {"k_saldo": "Dein Schuldschein ist wie ein kleines Konto. Was du anschreibst, kommt dazu. Gibst du dem Betreiber Geld, wird es abgezogen. Gibst du mehr, als offen ist, hast du Guthaben, von dem deine nächsten Einkäufe abgehen.", "k_buy": "Produkt antippen und Anzahl wählen. Der Betrag landet auf deinem Schuldschein. Angezeigt wird, was laut App im Regal liegt. Fehlt etwas, das du vor dir siehst, sag dem Betreiber Bescheid oder zahle bar.", "k_entries": "Hier stehen deine letzten 30 Buchungen mit Datum. Einen Kauf kannst du 5 Minuten lang zurücknehmen, falls du dich vertippt hast. Danach hilft der Betreiber.", "k_wish": "Dein Wunsch geht ohne deinen Namen an den Betreiber. Wünschen mehrere dasselbe, wird es zusammengezählt.", "kasse": "Kassenstand: alle Einnahmen minus alle Ausgaben seit Beginn, auch die Einkäufe, die du aus eigener Tasche bezahlt hast. Ein Minus heißt: Der Kiosk schuldet dir noch Geld.", "fehl": "Abgleich Ware/Kasse: Was laut Zählung ohne Buchung aus dem Regal verschwunden ist, hätte bar bezahlt werden müssen. Die App vergleicht diesen Warenwert mit den Barverkäufen des letzten Kassensturzes. „fehlen“ heißt: weniger Geld als Ware, „mehr in der Kasse“: mehr Geld als Ware. Das geht nur, wenn du zwischen zwei Kassenstürzen unter Regal gezählt hast, am besten direkt vor dem Kassensturz.", "ampel": "Die Ampel richtet sich danach, wie lange der Bestand noch reicht: Bestand geteilt durch den Verkauf pro Woche der letzten 4 Wochen. Ein Ladenhüter mit 4 Stück kann grün sein, ein Renner mit 10 Stück rot.", "mhd": "Haltbarkeit: Gelb ab 30 Tagen vor Ablauf, damit noch Zeit für einen Abverkaufspreis bleibt. Rot bei weniger als 14 Tagen und wenn es abgelaufen ist.", "claude": "Was du hier schreibst, liest Claude werktags um 10:13 und 14:13 Uhr. Daten und Fragen erledigt Claude direkt, Änderungen an der App gehen an die Programmierung. Schuldscheine, Löschen und Sicherheit nur nach Rückfrage.", "backup": "Lädt alle Kiosk-Daten als Datei auf dein Gerät: Produkte, Buchungen, Schuldscheine, Zählungen, Wünsche und offene Aufträge, ohne PINs, ohne QR-Code und ohne Fotos. Zusätzlich legt Claude jeden Freitag eine Sicherung in dein Google Drive.", "zaehlen": "Trag ein, was wirklich im Regal liegt. Was seit der letzten Zählung ohne Buchung fehlt, zählt als Barverkauf oder Schwund und fließt in den Fehlbetrag. Am besten direkt vor einem Kassensturz zählen.", "fotos": "Fotos vom Regal oder von einzelnen Produkten mit Haltbarkeitsdatum, bis zu 60 auf einmal. Claude zählt bzw. liest die Daten und legt einen Vorschlag ab, den du mit „Prüfen“ bestätigst.", "wuensche": "Wünsche der Kollegen, ohne Namen. Die Zahl zeigt, wie viele dasselbe wollen. „Erledigt“ nimmt den Wunsch aus der Liste.", "einkauf": "Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag; gebucht wird erst, wenn du ihn prüfst und speicherst.", "kassensturz": "Kassensturz geht, wann immer du willst, ohne festen Rhythmus: Kasse leeren, Geld zählen, Betrag eintragen. Einzahlungen und Auszahlungen seit dem letzten Kassensturz rechnet die App heraus, der Rest zählt als Barverkauf.", "storno": "Storno nimmt eine eigene Eingabe zurück: Buchung von Hand, Einkauf (samt Bestand) oder den letzten Kassensturz. Einzahlungen korrigierst du unter Leute.", "schuldscheine": "Rot mit Minus: Schulden. Grün: Guthaben. Einzahlung: Geld, das du bekommen hast; über den offenen Betrag hinaus wird es Guthaben. Auszahlung: Guthaben bar zurückgeben. Lampe grün: hat zugestimmt, leer: noch nicht angemeldet oder nicht zugestimmt, rot: gerade gesperrt.", "rangliste": "Umsatz pro Person aus Käufen per Schuldschein, ohne Einzahlungen. Welche Produkte jemand kauft, wird nicht gespeichert.", "qr": "Über diesen Code melden sich Kollegen an. Ein neuer Code macht den alten sofort ungültig; wer angemeldet ist, bleibt es. Ab 30 Tagen erinnert die Startseite.", "next3": "Die drei Produkte, deren Haltbarkeitsdatum als Nächstes erreicht wird, egal wie weit es noch hin ist. Bereits Abgelaufenes steht weiter oben in Rot."};
+const INFO = {"k_saldo": "Dein Schuldschein ist wie ein kleines Konto. Was du anschreibst, kommt dazu. Gibst du dem Betreiber Geld, wird es abgezogen. Gibst du mehr, als offen ist, hast du Guthaben, von dem deine nächsten Einkäufe abgehen.", "k_buy": "Produkt antippen und Anzahl wählen. Der Betrag landet auf deinem Schuldschein. Angezeigt wird, was laut App im Regal liegt. Fehlt etwas, das du vor dir siehst, sag dem Betreiber Bescheid oder zahle bar.", "k_entries": "Hier stehen deine letzten 30 Buchungen mit Datum. Einen Kauf kannst du 5 Minuten lang zurücknehmen, falls du dich vertippt hast. Danach hilft der Betreiber.", "k_wish": "Dein Wunsch geht ohne deinen Namen an den Betreiber. Wünschen mehrere dasselbe, wird es zusammengezählt.", "kasse": "Kassenstand: alle Einnahmen minus alle Ausgaben seit Beginn, auch die Einkäufe, die du aus eigener Tasche bezahlt hast. Ein Minus heißt: Der Kiosk schuldet dir noch Geld.", "fehl": "Abgleich Ware/Kasse: Was laut Zählung ohne Buchung aus dem Regal verschwunden ist, hätte bar bezahlt werden müssen. Die App vergleicht diesen Warenwert mit den Barverkäufen des letzten Kassensturzes. „fehlen“ heißt: weniger Geld als Ware, „mehr in der Kasse“: mehr Geld als Ware. Das geht nur, wenn du zwischen zwei Kassenstürzen unter Regal gezählt hast, am besten direkt vor dem Kassensturz.", "ampel": "Die Ampel richtet sich danach, wie lange der Bestand noch reicht: Bestand geteilt durch den Verkauf pro Woche der letzten 4 Wochen. Ein Ladenhüter mit 4 Stück kann grün sein, ein Renner mit 10 Stück rot.", "mhd": "Haltbarkeit: Gelb ab 30 Tagen vor Ablauf, damit noch Zeit für einen Abverkaufspreis bleibt. Rot bei weniger als 14 Tagen und wenn es abgelaufen ist.", "claude": "Was du hier schreibst, liest Claude werktags um 10:13 und 14:13 Uhr. Daten und Fragen erledigt Claude direkt, Änderungen an der App gehen an die Programmierung. Schuldscheine, Löschen und Sicherheit nur nach Rückfrage.", "backup": "Lädt alle Kiosk-Daten als Datei auf dein Gerät: Produkte, Buchungen, Schuldscheine, Zählungen, Wünsche und offene Aufträge, ohne PINs, ohne QR-Code und ohne Fotos. Zusätzlich legt Claude jeden Freitag eine Sicherung in dein Google Drive.", "zaehlen": "Trag ein, was wirklich im Regal liegt. Was seit der letzten Zählung ohne Buchung fehlt, zählt als Barverkauf oder Schwund und fließt in den Fehlbetrag. Am besten direkt vor einem Kassensturz zählen.", "fotos": "Fotos vom Regal oder von einzelnen Produkten mit Haltbarkeitsdatum, bis zu 60 auf einmal. Claude zählt bzw. liest die Daten und legt einen Vorschlag ab, den du mit „Prüfen“ bestätigst.", "wuensche": "Wünsche der Kollegen, ohne Namen. Die Zahl zeigt, wie viele dasselbe wollen. „Erledigt“ nimmt den Wunsch aus der Liste.", "einkauf": "Kassenbon fotografieren, Screenshot einer Bestellung hochladen oder einfach ansagen, was du wo gekauft hast. Claude macht daraus einen Vorschlag; gebucht wird erst, wenn du ihn prüfst und speicherst.", "kassensturz": "Kassensturz geht, wann immer du willst, ohne festen Rhythmus: Kasse leeren, Geld zählen, Betrag eintragen. Einzahlungen und Auszahlungen seit dem letzten Kassensturz rechnet die App heraus, der Rest zählt als Barverkauf.", "storno": "Storno nimmt eine eigene Eingabe zurück: Buchung von Hand, Einkauf (samt Bestand) oder den letzten Kassensturz. Einzahlungen korrigierst du unter Leute.", "schuldscheine": "Rot mit Minus: Schulden. Grün: Guthaben. Einzahlung: Geld, das du bekommen hast; über den offenen Betrag hinaus wird es Guthaben. Auszahlung: Guthaben bar zurückgeben. Lampe grün: hat zugestimmt, leer: noch nicht angemeldet oder nicht zugestimmt, rot: gerade gesperrt.", "rangliste": "Umsatz pro Person aus Käufen per Schuldschein, ohne Einzahlungen. Welche Produkte jemand kauft, wird nicht gespeichert.", "qr": "Über diesen Code melden sich Kollegen an. Ein neuer Code macht den alten sofort ungültig; wer angemeldet ist, bleibt es. Ab 30 Tagen erinnert die Startseite.", "next3": "Die drei Produkte, deren Haltbarkeitsdatum als Nächstes erreicht wird, egal wie weit es noch hin ist. Bereits Abgelaufenes steht weiter oben in Rot.", "k_express": "Der Kiosk-Express bringt deine Bestellung ins Büro, ab 3 € frei Haus. Bezahlt wird wie immer über deinen Schuldschein. Den Status setzt der Betreiber von Hand, die Lieferzeit ist ein Scherz.", "express": "Offene Lieferungen mit Vorname, Büro und Produkten. „Geliefert“ und „Storno“ löschen Büro und Produkte. Storno schreibt dem Kollegen den Betrag gut; der Bestand bleibt unverändert.", "advent": "Adventskalender: höchstens ein Gewinn pro Tag, höchstens zwei pro Person, wer noch nicht gewonnen hat, kommt zuerst dran. Gewinn ist ein Produkt bis 0,30 €, das spätestens Ende Februar abläuft; es wird als Verlust gebucht und am Kiosk abgeholt.", "ntfy": "Benachrichtigung über die kostenlose App ntfy. Gesendet werden nur „neue Lieferung“, Büro und Anzahl der Posten, ohne Namen. Wer den Kanalnamen kennt, kann mitlesen; gib ihn nicht weiter."};
 const ii = k => `<button type="button" class="ii noprint" data-a="info" data-k="${k}" aria-label="Erklärung">i</button>`;
 let toastT;
 function toast(msg) {
   toastEl.textContent = msg; toastEl.hidden = false;
+  toastEl.classList.toggle('top', !modal.hidden || !!$('#cartbar'));
   clearTimeout(toastT); toastT = setTimeout(() => { toastEl.hidden = true; }, 3200);
 }
 
@@ -60,7 +61,7 @@ function ask(title, fields, okLabel = 'Speichern', intro = '') {
 }
 
 /* ---------------- Kollegen ---------------- */
-const K = { code: null, token: null, names: null, sel: null, st: null, all: false, q: '', view: LS.get('kview') === 'kacheln' ? 'kacheln' : 'liste' };
+const K = { code: null, token: null, names: null, sel: null, st: null, all: false, q: '', cart: null, del: null, rate: 0, tip: '', view: LS.get('kview') === 'kacheln' ? 'kacheln' : 'liste' };
 const favGet = () => { try { const f = JSON.parse(LS.get('kfav') || 'null'); return f && f.id ? f : null; } catch { return null; } };
 
 const CONSENT_SHORT = 'Mit dem Schuldschein schreibst du im Kiosk an, statt Kleingeld zu suchen, und siehst jederzeit, was noch offen ist. ' +
@@ -79,7 +80,7 @@ async function kBoot() {
   K.token = LS.get('ktoken');
   if (K.token) {
     K.st = await rpc('k_state', { p_token: K.token });
-    if (!K.st) { K.token = null; LS.del('ktoken'); }
+    if (!K.st) { K.token = null; LS.del('ktoken'); } else await kDel();
   }
   if (!K.token) {
     K.names = await rpc('k_names', { p_code: K.code });
@@ -145,11 +146,20 @@ function kRender() {
   app.innerHTML = `<div class="paper">${head('Schuldschein von ' + esc(s.vorname))}
       ${ln((s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN') + ' ' + ii('k_saldo'), `<span class="${s.saldo > 0 ? 'neg' : s.saldo < 0 ? 'pos' : ''}">${s.saldo > 0 ? '−' : ''}${eur(Math.abs(s.saldo))} €</span>`, 'big')}
       <p class="small mut">${s.saldo < 0 ? 'Einkäufe werden von deinem Guthaben abgezogen. Ist es aufgebraucht, schreibst du wie gewohnt an.' : 'Bezahlen oder Guthaben aufladen: Betrag dem Betreiber geben, er trägt ihn ein.'}</p></div>
+    ${K.del ? `<div class="paper express"><h2>Kiosk-Express ${ii('k_express')}</h2>
+      <div class="steps">${['neu', 'unterwegs', 'geliefert'].map((st, i) => `<span class="${['neu', 'unterwegs', 'geliefert'].indexOf(K.del.status) >= i ? 'on' : ''}">${['Bestellt', 'Unterwegs', 'Geliefert'][i]}</span>`).join('')}</div>
+      <p>${pick(DEL_TXT[K.del.status] || DEL_TXT.neu, K.del.id + K.del.status)}</p>
+      ${K.del.status === 'geliefert' && !K.del.rating ? `<p class="small">Wie war die Lieferung?</p>
+        <div class="rate" role="group" aria-label="Bewertung">${[1, 2, 3, 4, 5].map(i => `<button type="button" data-a="k-rate" data-v="${i}" aria-label="${i} von 5" aria-pressed="${i <= K.rate}">${bar(i <= K.rate)}</button>`).join('')}</div>
+        <p class="small">Trinkgeld:</p><div class="seg">${[['laecheln', 'ein Lächeln'], ['danke', 'ein Danke'], ['10cent', '10 Cent']].map(([v, l]) => `<button type="button" data-a="k-tip" data-v="${v}" class="${K.tip === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="row"><button class="btn pri" data-a="k-rate-ok"${K.rate ? '' : ' disabled'}>Bewerten</button></div>`
+      : K.del.rating ? `<p class="small mut">Danke für ${K.del.rating} von 5 Schokoriegeln!${K.del.tip === '10cent' ? ' Die 10 Cent Trinkgeld stehen auf deinem Schuldschein.' : ''}</p>` : ''}</div>` : ''}
     <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2>
       <div class="seg viewsw" role="group" aria-label="Ansicht">${[['liste', 'Liste'], ['kacheln', 'Kacheln']].map(([v, l]) => `<button type="button" data-a="k-view" data-v="${v}" class="${K.view === v ? 'on' : ''}" aria-pressed="${K.view === v}">${l}</button>`).join('')}</div>
-      <p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Gerade ist nichts im Regal eingetragen.</p>'}</div>
+      <p class="small mut">${K.cart ? '<b>Lieferkorb:</b> Produkte antippen, unten bestellen.' : 'Zum Anschreiben das Produkt antippen.'}</p>
+      ${K.cart || (K.del && K.del.status !== 'geliefert') ? '' : '<div class="row"><button class="btn sm" data-a="k-cart">Liefern lassen (ab 3 € frei Haus)</button></div>'}${prod || '<p>Gerade ist nichts im Regal eingetragen.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen ${ii('k_entries')}</h2>${s.entries.length ? s.entries.map(e =>
-      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? (e.cents > 0 ? 'Übertrag Schulden' : 'Übertrag Guthaben') : 'Kauf'}</span>` +
+      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'trinkgeld' ? 'Trinkgeld' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? (e.cents > 0 ? 'Übertrag Schulden' : 'Übertrag Guthaben') : 'Kauf'}</span>` +
       `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span class="${e.cents < 0 ? 'pos' : ''}">${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
     <div class="paper"><h2>Wunsch ${ii('k_wish')}</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
@@ -160,6 +170,7 @@ function kRender() {
 <p><b>iPhone:</b> Diese Seite in Safari öffnen, unten auf Teilen tippen (Quadrat mit Pfeil nach oben), „Zum Home-Bildschirm“ wählen und bestätigen. Beim ersten Öffnen des neuen Symbols einmal neu anmelden.</p>
 <p><b>Android:</b> Diese Seite in Chrome öffnen, oben rechts auf die drei Punkte tippen, „Zum Startbildschirm hinzufügen“ oder „App installieren“ wählen und bestätigen.</p>
 <p class="mut">Das Symbol öffnet den Kiosk wie eine App. Installiert wird nichts.</p></details></div>`;
+  cartBar();
 }
 
 async function kLogin(e) {
@@ -171,7 +182,58 @@ async function kLogin(e) {
   else toast('Anmeldung nicht möglich.');
   $('#pin').value = '';
 }
-const kReload = async () => { K.st = await rpc('k_state', { p_token: K.token }); if (!K.st) { LS.del('ktoken'); K.token = null; return kBoot(); } kRender(); };
+const kDel = async () => { try { K.del = await rpc('k_delivery', { p_token: K.token }); } catch { K.del = null; } };
+const kReload = async () => { K.st = await rpc('k_state', { p_token: K.token }); if (!K.st) { LS.del('ktoken'); K.token = null; return kBoot(); } await kDel(); kRender(); };
+
+/* Lieferdienst: Sprüche für Status und Lieferzeit */
+const DEL_TXT = {
+  neu: ['Bestellung eingegangen. Der Lieferant schnürt die Schuhe.', 'Bestellung eingegangen. Der Lieferant sucht seinen Schlüssel.', 'Bestellung eingegangen. Der Lieferant dehnt sich kurz.'],
+  unterwegs: ['Unterwegs! Kaffeepause nicht ausgeschlossen.', 'Unterwegs! Gerade an der Kaffeemaschine vorbei, ohne anzuhalten.', 'Unterwegs! Vorsicht, Flurverkehr.'],
+  geliefert: ['Geliefert. Guten Appetit!']
+};
+const pick = (arr, seed) => arr[Math.abs([...String(seed)].reduce((a, c) => a * 31 + c.charCodeAt(0) | 0, 7)) % arr.length];
+const ADVENT_NIETE = ['Heute leider nur Lebkuchenduft.', 'Heute steckt nur ein Tannenzweig drin.', 'Heute gibt es ein warmes Lächeln, sonst nichts.', 'Der Wichtel hatte heute frei.', 'Heute nur Glitzer. Morgen vielleicht mehr.'];
+const bar = on => `<svg viewBox="0 0 40 20" aria-hidden="true"><g transform="rotate(-12 20 10)"><rect x="4" y="5" width="32" height="10" rx="2" fill="${on ? '#5b3a29' : '#e4e1da'}" stroke="#1b1b1b" stroke-width="1.5"/><rect x="12" y="6.5" width="16" height="7" rx="1" fill="${on ? '#d4a017' : '#f7f6f1'}"/></g></svg>`;
+function adventPopup(a) {
+  if (!a) return;
+  const today = iso(new Date());
+  if (!a.gewonnen) { if (LS.get('kadvent') === today) return; LS.set('kadvent', today); }
+  modal.innerHTML = `<div class="paper advent${a.gewonnen ? ' win' : ''}"><p class="ctr"><span class="tuer">${a.tag}</span></p>
+    <h2 class="ctr">Adventskalender, Türchen ${a.tag}</h2>
+    ${a.gewonnen ? `<p class="ctr big">Gewonnen!</p><p class="ctr">Nimm dir am Kiosk <b>ein ${esc(a.produkt)}</b> kostenlos mit. Frohe Adventszeit!</p>`
+      : `<p class="ctr">${pick(ADVENT_NIETE, today)} Morgen öffnet sich das nächste Türchen.</p>`}
+    <div class="row"><button class="btn pri" data-a="m-close">${a.gewonnen ? 'Danke!' : 'OK'}</button></div></div>`;
+  modal.hidden = false;
+}
+function pickQty(p, okLabel) {
+  return new Promise(res => {
+    let n = 1;
+    const draw = () => {
+      modal.innerHTML = `<div class="paper"><h2>${esc(p.name)}</h2><p class="small mut">Wie viele? Je ${eur(p.cents)} €</p>
+        <div class="qty">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="btn${i === n ? ' pri' : ''}" data-q="${i}" aria-pressed="${i === n}">${i}</button>`).join('')}</div>
+        ${ln('Zusammen', eur(n * p.cents) + ' €', 'big')}
+        <div class="row"><button type="button" class="btn" data-q="x">Abbrechen</button><button type="button" class="btn pri" data-q="ok">${okLabel}</button></div></div>`;
+    };
+    draw(); modal.hidden = false;
+    modal.onclick = e => {
+      const b = e.target.closest('[data-q]'); if (!b) return;
+      e.stopPropagation();
+      const q = b.dataset.q;
+      if (q === 'x' || q === 'ok') { modal.onclick = null; modal.hidden = true; modal.innerHTML = ''; res(q === 'ok' ? n : 0); }
+      else { n = Number(q); draw(); }
+    };
+  });
+}
+function cartSum() { return Object.entries(K.cart || {}).reduce((a, [id, n]) => { const p = K.st.products.find(x => x.id === id); return a + (p ? p.cents * n : 0); }, 0); }
+function cartBar() {
+  let el = $('#cartbar');
+  document.body.classList.toggle('hascart', !!K.cart);
+  if (!K.cart) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'cartbar'; document.body.appendChild(el); }
+  const sum = cartSum(), min = 300, n = Object.values(K.cart).reduce((a, b) => a + b, 0);
+  el.innerHTML = `<div><b>Lieferkorb: ${n} Artikel · ${eur(sum)} €</b><br><span class="small">${!n ? 'Produkte antippen zum Hinzufügen.' : sum < min ? `Für ${eur(sum)} € steht der Lieferant nicht auf. Noch ${eur(min - sum)} € bis frei Haus.` : 'Lieferung frei Haus! Lieferzeit ca. 4–11 Minuten, je nach Flurverkehr.'}</span></div>
+    <div class="row"><button class="btn" data-a="k-cart-x">Abbrechen</button><button class="btn pri" data-a="k-cart-ok"${sum < min ? ' disabled' : ''}>Liefern lassen</button></div>`;
+}
 
 const kActs = {
   'k-sel': el => { K.sel = { id: el.dataset.id, n: el.dataset.n }; kRender(); },
@@ -181,30 +243,36 @@ const kActs = {
   'k-fav': () => { K.all = false; kRender(); },
   'k-forget': () => { LS.del('kfav'); toast('Dein Handy hat deinen Namen vergessen.'); kRender(); },
   'k-consent': async () => { await rpc('k_consent', { p_token: K.token }); await kReload(); },
-  'k-logout': async () => { await rpc('k_logout', { p_token: K.token }); LS.del('ktoken'); K.token = null; K.st = null; await kBoot(); },
+  'k-logout': async () => { K.cart = null; cartBar(); await rpc('k_logout', { p_token: K.token }); LS.del('ktoken'); K.token = null; K.st = null; await kBoot(); },
   'k-buy': async el => {
     const p = K.st.products.find(x => x.id === el.dataset.id);
-    const qty = await new Promise(res => {
-      let n = 1;
-      const draw = () => {
-        modal.innerHTML = `<div class="paper"><h2>${esc(p.name)}</h2><p class="small mut">Wie viele? Je ${eur(p.cents)} €</p>
-          <div class="qty">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="btn${i === n ? ' pri' : ''}" data-q="${i}" aria-pressed="${i === n}">${i}</button>`).join('')}</div>
-          ${ln('Zusammen', eur(n * p.cents) + ' €', 'big')}
-          <div class="row"><button type="button" class="btn" data-q="x">Abbrechen</button><button type="button" class="btn pri" data-q="ok">Anschreiben</button></div></div>`;
-      };
-      draw(); modal.hidden = false;
-      modal.onclick = e => {
-        const b = e.target.closest('[data-q]'); if (!b) return;
-        e.stopPropagation();
-        const q = b.dataset.q;
-        if (q === 'x' || q === 'ok') { modal.onclick = null; modal.hidden = true; modal.innerHTML = ''; res(q === 'ok' ? n : 0); }
-        else { n = Number(q); draw(); }
-      };
-    });
+    const qty = await pickQty(p, K.cart ? 'In den Lieferkorb' : 'Anschreiben');
     if (!qty) return;
+    if (K.cart) { K.cart[p.id] = Math.min(10, (K.cart[p.id] || 0) + qty); toast(`${qty} × ${p.name} im Lieferkorb.`); return cartBar(); }
     const r = await rpc('k_buy', { p_token: K.token, p_product: p.id, p_qty: qty });
     toast(r.ok ? `${p.name} angeschrieben. 5 Minuten lang rückgängig möglich.` : 'Buchung nicht möglich.');
     await kReload();
+    if (r.ok) adventPopup(r.advent);
+  },
+  'k-cart': () => { K.cart = {}; kRender(); window.scrollTo(0, 0); },
+  'k-cart-x': () => { K.cart = null; kRender(); },
+  'k-cart-ok': async () => {
+    const items = Object.entries(K.cart).map(([id, qty]) => ({ id, qty }));
+    const v = await ask('Liefern lassen', [{ k: 'o', label: 'Wohin? Büro oder Raum', value: LS.get('kbuero') || '', max: 40 }], 'Jetzt bestellen',
+      `<p class="small">${items.length} Posten für ${eur(cartSum())} € werden sofort angeschrieben. Der Betreiber sieht Vornamen, Büro und Produkte, bis geliefert ist; danach werden Büro und Produkte gelöscht.</p>`);
+    if (!v || !v.o.trim()) return;
+    LS.set('kbuero', v.o.trim());
+    const r = await rpc('k_deliver', { p_token: K.token, p_items: items, p_office: v.o.trim() });
+    if (!r.ok) return toast(r.err === 'mindest' ? 'Unter 3 € liefert der Kiosk-Express nicht.' : r.err === 'offen' ? 'Du hast schon eine offene Lieferung.' : 'Bestellung nicht möglich.');
+    K.cart = null; toast('Bestellt! Der Kiosk-Express ist informiert.');
+    await kReload(); window.scrollTo(0, 0);
+    adventPopup(r.advent);
+  },
+  'k-rate': el => { K.rate = Number(el.dataset.v); kRender(); },
+  'k-tip': el => { K.tip = el.dataset.v; kRender(); },
+  'k-rate-ok': async () => {
+    await rpc('k_rate', { p_token: K.token, p_id: K.del.id, p_rating: K.rate, p_tip: K.tip || '' });
+    K.rate = 0; K.tip = ''; await kReload();
   },
   'k-undo': async el => { const r = await rpc('k_undo', { p_token: K.token, p_entry: el.dataset.id }); toast(r.ok ? 'Buchung zurückgenommen.' : 'Zu spät, bitte den Betreiber ansprechen.'); await kReload(); },
   'k-wish': async () => {
@@ -276,10 +344,12 @@ async function aLoad() {
     SB.from('wishes').select('id,text,created_at,wish_votes(count)').eq('done', false),
     SB.from('settings').select('key,value'),
     SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
-    SB.from('photo_jobs').select('id,at,paths,status,result,note,kind,text').neq('status', 'fertig').order('at', { ascending: false })
-  ]).then(a => a.map(ok));
+    SB.from('photo_jobs').select('id,at,paths,status,result,note,kind,text').neq('status', 'fertig').order('at', { ascending: false }),
+    SB.from('deliveries').select('id,person_id,office,items,total_cents,status,rating,tip,created_at').order('created_at', { ascending: false }).limit(30),
+    SB.from('advent_wins').select('day,person_id,product_id').order('day')
+  ]).then(a => a.map(r => r.error && /deliveries|advent_wins/.test(r.error.message || '') ? [] : ok(r)));
   const set = Object.fromEntries(r[9].map(x => [x.key, x.value]));
-  A.d = { products: r[0], sales: r[1], journal: r[2], ledger: r[3], persons: r[4], mhd: r[5], alerts: r[6], cash: r[7], wishes: r[8], set, requests: r[10], jobs: r[11].filter(j => j.kind !== 'einkauf'), drafts: r[11].filter(j => j.kind === 'einkauf'),
+  A.d = { products: r[0], sales: r[1], journal: r[2], ledger: r[3], persons: r[4], mhd: r[5], alerts: r[6], cash: r[7], wishes: r[8], set, requests: r[10], dels: r[12] || [], advent: r[13] || [], jobs: r[11].filter(j => j.kind !== 'einkauf'), drafts: r[11].filter(j => j.kind === 'einkauf'),
     rot: Number(set.rot || 1), gelb: Number(set.gelb || 2) };
   const now = Date.now(), d28 = now - 28 * 864e5;
   A.d.products.forEach(p => {
@@ -341,6 +411,13 @@ function vBon() {
     ${ln('Offene Schuldscheine', eur(offen))}
     ${guthaben ? ln('Guthaben der Kollegen', eur(guthaben)) : ''}
     ${ln('Abgleich Ware/Kasse ' + ii('fehl'), fehl)}
+    ${(() => { const open = d.dels.filter(x => x.status === 'neu' || x.status === 'unterwegs'); const vn = id => (d.persons.find(p => p.id === id) || {}).vorname || '?';
+      return open.length ? `<hr><h2 class="neg">Kiosk-Express (${open.length}) ${ii('express')}</h2>` + open.map(x => `<div class="it pers"><i class="lamp ${x.status === 'neu' ? 'r' : 'y'}"></i>
+        <span><b>${esc(vn(x.person_id))}</b> · Büro ${esc(x.office || '?')}<br><span class="small">${(x.items || []).map(i => `${i.qty} × ${esc(i.name)}`).join(', ')} · ${eur(x.total_cents)} €</span></span><span class="small">${x.status === 'neu' ? 'neu' : 'unterwegs'}</span>
+        <span class="acts">${x.status === 'neu' ? `<button class="btn sm" data-a="a-del" data-id="${x.id}" data-s="unterwegs">Unterwegs</button>` : ''}<button class="btn sm" data-a="a-del" data-id="${x.id}" data-s="geliefert">Geliefert</button><button class="btn sm" data-a="a-del" data-id="${x.id}" data-s="storniert">Storno</button></span></div>`).join('') : ''; })()}
+    ${(() => { const von = d.set.advent_von, bis = d.set.advent_bis, t0 = iso(t); if (!von || t0 < von || t0 > bis) return '';
+      const w = d.advent.find(x => x.day === t0), vn = id => (d.persons.find(p => p.id === id) || {}).vorname || '–';
+      return `<hr><h2>Adventskalender ${ii('advent')}</h2>${ln('Heute', w ? esc(vn(w.person_id)) + ' gewinnt ' + esc(pname(w.product_id)) : 'noch kein Gewinn')}${ln('Gewinne bisher', String(d.advent.length))}`; })()}
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
     ${(() => { const a = d.set.kiosk_code_at ? Math.floor((t - pd(d.set.kiosk_code_at)) / 864e5) : 0;
       return a >= 30 ? `<hr><h2>QR-Code erneuern</h2><p class="small">Der QR-Code am Kiosk ist ${a} Tage alt. Unter Leute einen neuen erzeugen und den Aushang neu drucken.</p><div class="row"><button class="btn sm" data-a="a-tab" data-t="leute">Zu Leute</button></div>` : ''; })()}
@@ -460,6 +537,10 @@ function vLeute() {
      <span class="acts"><button class="btn sm" data-a="a-pay" data-id="${p.id}">Einzahlung</button>${p.saldo < 0 ? ` <button class="btn sm" data-a="a-payout" data-id="${p.id}">Auszahlung</button>` : ''} <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
     <p class="small mut">Grün: hat zugestimmt · leer: noch nicht angemeldet · rot: gerade gesperrt</p>
     <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button><button class="btn" data-a="a-persons">Mehrere als Liste</button></div></div>
+    <div class="paper"><h2>Benachrichtigung ${ii('ntfy')}</h2>
+      ${d.set.ntfy_topic ? `<p class="small">Kanal: <b class="brk">${esc(d.set.ntfy_topic)}</b></p><p class="small mut">In der App „ntfy“ (App Store bzw. Google Play) auf „+“ tippen, diesen Kanal eintragen, Server ntfy.sh lassen. Dann kommt bei jeder Lieferung eine Nachricht, nur mit Büro und Anzahl der Posten.</p>
+        <div class="row"><button class="btn sm" data-a="a-copy" data-u="${esc(d.set.ntfy_topic)}">Kanal kopieren</button><button class="btn sm" data-a="a-ntfy">Neuen Kanal</button></div>`
+        : '<p class="small mut">Noch keine Benachrichtigung eingerichtet. Ohne sie siehst du Lieferungen nur auf der Startseite.</p><div class="row"><button class="btn" data-a="a-ntfy">Einrichten</button></div>'}</div>
     <div class="paper"><h2>Rangliste Umsatz ${ii('rangliste')}</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
     <div class="paper poster sheet"><h2 class="noprint">QR-Code für den Kiosk ${ii('qr')}</h2><p class="small mut noprint">Aushängen oder auf einen NFC-Chip schreiben. Nur wer diesen Code hat, sieht die Namensliste. Zum Speichern lange auf den Code drücken und „In Fotos sichern“ wählen.</p>
       <div class="printonly"><p class="ctr"><span class="logo">KIOSK</span></p><p class="ctr">Anschreiben mit dem Handy</p></div>
@@ -500,6 +581,19 @@ const aActs = {
     if (error) return toast('Konto konnte nicht angelegt werden: ' + error.message);
     if (data.session) return aBoot(data.session);
     toast('Konto angelegt. Öffne den Link in der Bestätigungs-Mail und melde dich dann hier an.');
+  },
+  'a-del': async el => {
+    const st = el.dataset.s;
+    if (st === 'storniert' && !(await ask('Lieferung stornieren?', [], 'Stornieren', '<p>Der Betrag wird dem Kollegen gutgeschrieben. Der Bestand bleibt, wie er ist; zähle bei Bedarf nach.</p>'))) return;
+    const r = await rpc('a_delivery', { p_id: el.dataset.id, p_status: st });
+    toast(r === 'ok' ? ({ unterwegs: 'Status: unterwegs.', geliefert: 'Als geliefert markiert.', storniert: 'Storniert und gutgeschrieben.' })[st] : 'Nicht möglich.');
+    await reload();
+  },
+  'a-ntfy': async () => {
+    const sure = await ask('Benachrichtigung einrichten', [], 'Neuen Kanal erzeugen', '<p>Die App erzeugt einen geheimen Kanalnamen. Den abonnierst du in der App „ntfy“. Ein vorhandener Kanal wird ersetzt.</p>');
+    if (!sure) return;
+    const topic = 'kiosk-' + [...crypto.getRandomValues(new Uint8Array(12))].map(x => x.toString(16).padStart(2, '0')).join('');
+    ok(await SB.from('settings').upsert({ key: 'ntfy_topic', value: topic })); await reload();
   },
   'a-seen': async el => { ok(await SB.from('alerts').update({ seen: true }).eq('id', el.dataset.id)); await reload(); },
   'a-cnt': () => { A.counting = true; aRender(); },

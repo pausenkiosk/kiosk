@@ -107,3 +107,19 @@ textarea{min-height:120px;resize:vertical}
 .tile .tp s{font-weight:400;font-size:11px}
 .tile .ts{font-size:10px;color:var(--mut)}
 .tile img{width:84%;max-width:96px;aspect-ratio:1;object-fit:cover;border-radius:10px;border:1px solid #e4e1da;flex:0 0 auto;background:#f0eee8}
+#cartbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--paper);border-top:2px solid var(--ink);box-shadow:0 -4px 12px rgba(0,0,0,.25);
+  padding:10px max(12px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));font-size:13px}
+#cartbar>div:first-child{max-width:440px;margin:0 auto}
+#cartbar .row{max-width:440px;margin:8px auto 0}
+.express .steps{display:flex;gap:4px;margin:6px 0}
+.express .steps span{flex:1;text-align:center;font-size:11px;padding:6px 0;border:1.5px solid var(--dash);border-radius:6px;color:var(--mut)}
+.express .steps span.on{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.rate{display:flex;gap:4px}
+.rate button{flex:1;background:none;border:1.5px solid var(--dash);border-radius:8px;padding:6px 0;cursor:pointer}
+.rate button[aria-pressed="true"]{border-color:var(--ink)}
+.rate svg{width:36px;height:18px}
+.btn:disabled{cursor:not-allowed}
+.advent .tuer{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border:3px double var(--red);border-radius:8px;font-size:28px;font-weight:700;color:var(--red)}
+.advent.win{background:radial-gradient(circle at 20% 10%,#ffe9a8 0 6px,transparent 7px),radial-gradient(circle at 80% 20%,#c9e7c2 0 5px,transparent 6px),radial-gradient(circle at 60% 85%,#f6c1c1 0 6px,transparent 7px),radial-gradient(circle at 15% 75%,#c7d8f3 0 5px,transparent 6px),var(--paper)}
+#toast.top{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
+body.hascart{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
