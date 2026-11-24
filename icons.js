@@ -64,6 +64,8 @@
       <path d="M30 52h40" stroke="${b}" stroke-width="5"/>`
   };
   window.productIcon = function (p) {
+    const img = (window.PRODUCT_IMAGES || {})[p.name];
+    if (img) return `<img src="img/${encodeURI(img)}" alt="" loading="lazy" decoding="async">`;
     const [shape, a, b] = look(p);
     return `<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">${SHAPES[shape](a, b)}</svg>`;
   };

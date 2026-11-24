@@ -106,3 +106,4 @@ textarea{min-height:120px;resize:vertical}
 .tile .tp{font-size:13px;font-weight:700;white-space:nowrap}
 .tile .tp s{font-weight:400;font-size:11px}
 .tile .ts{font-size:10px;color:var(--mut)}
+.tile img{width:84%;max-width:96px;aspect-ratio:1;object-fit:cover;border-radius:10px;border:1px solid #e4e1da;flex:0 0 auto;background:#f0eee8}
