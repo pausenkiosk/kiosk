@@ -3,7 +3,7 @@
    Der Verwalter-Teil baut auf dem auf, was der Kollegen-Teil hinterlässt (Sperre, Buchung).
    „kasse“ räumt Kassenstürze und Zahlungen ab und rechnet neu; „grenzen“ legt viele Buchungen an und läuft zuletzt. */
 const lib = require('./lib');
-const parts = { sperren: require('./sperren.test'), kollege: require('./kollege.test'), verwalter: require('./verwalter.test'), kasse: require('./kasse.test'), guthaben: require('./guthaben.test'), wunsch: require('./wunsch.test'), grenzen: require('./grenzen.test') };
+const parts = { sperren: require('./sperren.test'), kollege: require('./kollege.test'), verwalter: require('./verwalter.test'), kasse: require('./kasse.test'), guthaben: require('./guthaben.test'), wunsch: require('./wunsch.test'), auszahlung: require('./auszahlung.test'), info: require('./info.test'), grenzen: require('./grenzen.test') };
 /* Nur auf ausdrücklichen Wunsch: alte App-Fassung gegen neue Datenbank (tests/run.sh uebergang mit KIOSK_APP_REF). */
 const extra = { uebergang: require('./uebergang.test') };
 

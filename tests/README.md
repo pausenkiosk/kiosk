@@ -37,6 +37,8 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein – in der F
 | `kasse.test.js` | Kassensturz nach Kasseninhalt (mit/ohne Zahlungen, mehrere Tage, Kasse kleiner als Zahlungen), Storno (Handbuchung, Kassensturz, Einkauf) |
 | `guthaben.test.js` | Guthaben aufladen, vom Guthaben anschreiben, Rückgängig, zweite Aufladung, Anzeige bei Verwalter und Kollege, Kassenbuch, Kassensturz, Abschottung zwischen Kollegen |
 | `wunsch.test.js` | Wunsch abgeben (Kollege), Zusammenzählen gleicher Wünsche, Grenzen, Liste und „Erledigt“ beim Verwalter |
+| `auszahlung.test.js` | Guthaben auszahlen (Teil-/Vollauszahlung, Grenzen, gleichzeitige Auszahlungen), Kassensturz mit Ein- und Auszahlungen |
+| `info.test.js` | Info-Knöpfe: vorhanden, Tippfläche, Text, nicht im Druck; nachprüfbare Aussagen der Texte gegen das Verhalten |
 | `uebergang.test.js` | (nur auf Wunsch, für den Wechsel von v14 auf Ausbaustufe 3) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
 | `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
 | `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |
