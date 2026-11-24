@@ -25,7 +25,7 @@ module.exports = async function info(browser) {
     const expect = (c, m) => { if (!c) bad.push(m); };   // erst alle Knöpfe prüfen, dann gesammelt melden
     for (let i = 0; i < n; i++) {
       const b = p.locator('#app .ii').nth(i);
-      await b.scrollIntoViewIfNeeded();
+      await b.evaluate(el => el.scrollIntoView({ block: 'center' }));   // in die Bildmitte, damit die feste Leiste unten nicht stört
       const m = await b.evaluate(el => {
         const r = el.getBoundingClientRect(), a = getComputedStyle(el, '::after');
         const pad = k => Math.max(0, -parseFloat(a[k]) || 0);
@@ -124,8 +124,8 @@ module.exports = async function info(browser) {
     await page.locator('#modal button', { hasText: 'OK' }).click();
     await page.locator('#app [data-a="a-jour"]').click();
     await fillModal(page, 'Buchung von Hand', { t: 'Infotest', i: '0,01' });
-    await page.locator('#app .it', { hasText: 'Infotest' }).waitFor();
     await idle(page);
+    eq((await db('journal', 'id', 'text', 'Infotest')).length, 1, 'Buchung nach dem Info-Fenster gespeichert');   // die Liste zeigt nur 25 Zeilen, daher in der Datenbank nachsehen
     await page.evaluate(async () => { await SB.from('journal').delete().eq('text', 'Infotest'); });
   });
 
