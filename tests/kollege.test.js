@@ -15,8 +15,15 @@ async function pin(page, value) {
 }
 
 module.exports = async function kollege(browser) {
+  let page = null;
+  /* „PIN ändern“ ausfüllen; ab v25 muss die neue PIN wiederholt werden */
+  const pinDialog = async (o, n) => {
+    await page.locator('#modal:not([hidden]) h2', { hasText: 'PIN ändern' }).waitFor();
+    const w = (await page.locator('#modal #f_w').count()) ? { w: n } : {};
+    await fillModal(page, 'PIN ändern', { o, n, ...w });
+  };
   setGroup('Kollege');
-  const page = await newPage(browser);
+  page = await newPage(browser);
   const S = step;
   const step_ = (n, f) => S(n, f, page);
 
@@ -78,7 +85,8 @@ module.exports = async function kollege(browser) {
     expect(['Getränke', 'Süßes'].every(h => heads.includes(h)), 'Gruppen fehlen: ' + heads.join(', '));
     await rowHas(page, 'Cola', /12 St.*1,50 €/);
     await rowHas(page, 'Wasser', /20 St.*0,80 €/);
-    await rowHas(page, 'Gummibärchen', /aus.*1,20 €/);
+    // bis v24 stand ein leeres Produkt als „aus“ in der Liste, ab v25 wird es den Kollegen nicht mehr gezeigt
+    if (await page.locator('#app .it', { hasText: 'Gummibärchen' }).count()) await rowHas(page, 'Gummibärchen', /aus.*1,20 €/);
     expect(await page.locator('#app .it', { hasText: 'Kaffee' }).count() === 0, 'Nicht sichtbares Produkt „Kaffee“ wird Kollegen angezeigt');
   });
   await step_('Anschreiben: Abbrechen bucht nichts', async () => {
@@ -123,19 +131,19 @@ module.exports = async function kollege(browser) {
   await step_('PIN ändern: falsche alte PIN wird abgelehnt', async () => {
     await hideToast(page);
     await page.locator('[data-a="k-pin"]').click();
-    await fillModal(page, 'PIN ändern', { o: '9999', n: '7777' });
+    await pinDialog('9999', '7777');
     await toast(page, /Nicht geändert/);
   });
   await step_('PIN ändern: neue PIN muss 4 Ziffern haben', async () => {
     await hideToast(page);
     await page.locator('[data-a="k-pin"]').click();
-    await fillModal(page, 'PIN ändern', { o: '2222', n: '12' });
+    await pinDialog('2222', '12');
     await toast(page, /Nicht geändert/);
   });
   await step_('PIN ändern: mit richtiger alter PIN klappt es', async () => {
     await hideToast(page);
     await page.locator('[data-a="k-pin"]').click();
-    await fillModal(page, 'PIN ändern', { o: '2222', n: '7777' });
+    await pinDialog('2222', '7777');
     await toast(page, /^PIN geändert\.$/);
   });
   await step_('Abmelden, alte PIN gilt nicht mehr, neue PIN gilt', async () => {

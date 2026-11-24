@@ -15,7 +15,7 @@
 #   KIOSK_SKIP_SEED=1       Testdaten nicht neu einspielen
 #   KIOSK_TEST_PORT         Standard: 8765
 #
-# Aufruf: tests/run.sh [sperren|kollege|verwalter|kasse|guthaben|wunsch|auszahlung|info|uebertrag|anmeldung|liste|grenzen|uebergang ...]   (ohne Angabe: alles)
+# Aufruf: tests/run.sh [sperren|kollege|verwalter|kasse|guthaben|wunsch|auszahlung|info|uebertrag|anmeldung|liste|sichtbar|grenzen|uebergang ...]   (ohne Angabe: alles)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

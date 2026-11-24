@@ -133,7 +133,7 @@ module.exports = async function liste(browser) {
     eq(JSON.stringify(await kFeld()), JSON.stringify({ label: 'DEIN GUTHABEN', text: '12,00 €', farbe: 'grün' }), 'Anzeige');
   });
   await K('Wechsel vom Guthaben ins Minus durch einen Kauf: Anzeige springt auf „OFFEN“, rot, mit Minus', async () => {
-    const p = (await kp.evaluate(async () => (await SB.rpc('k_state', { p_token: K.token })).data.products.filter(x => x.cents >= 100)))[0];
+    const p = (await kp.evaluate(async () => (await SB.rpc('k_state', { p_token: K.token })).data.products.filter(x => x.cents >= 100 && x.stock >= 10)))[0];
     const stueck = Math.floor(1200 / p.cents) + 1;                     // so viele, dass das Guthaben von 12,00 gerade überschritten ist
     let rest = stueck;
     while (rest > 0) { const q = Math.min(5, rest); await idle(kp); await hideToast(kp);
