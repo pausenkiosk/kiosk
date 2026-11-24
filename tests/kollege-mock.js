@@ -50,6 +50,8 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
     await p.screenshot({ path: out + '/k-seite.png', fullPage: true });
     if (!(await p.$('text=Als App auf den Startbildschirm'))) throw new Error('Anleitung fehlt');
     await p.click('text=Als App auf den Startbildschirm'); await p.waitForSelector('text=Zum Home-Bildschirm');
+    const sal = await p.$eval('.big span.pos', x => x.textContent).catch(() => null);
+    if (sal !== '12,50 €') throw new Error('Guthaben nicht grün: ' + sal);
     await p.click('text=Abmelden'); await p.waitForSelector('text=Weiter als Karl');
     if (await p.$('#kq')) throw new Error('Suchfeld trotz Favorit');
     await p.screenshot({ path: out + '/k-favorit.png' });

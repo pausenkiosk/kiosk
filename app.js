@@ -140,7 +140,7 @@ function kRender() {
     `<button class="it" data-a="k-buy" data-id="${p.id}"><i class="lamp ${p.stock > 0 ? 'g' : 'o'}"></i><span>${esc(p.name)}${p.sale ? ' <b class="neg">Abverkauf</b>' : ''}</span>` +
     `<span class="mut">${p.stock > 0 ? p.stock + ' St' : 'aus'}</span><span>${p.sale ? `<s>${eur(p.normal)}</s> ` : ''}${eur(p.cents)} €</span></button>`).join('')).join('');
   app.innerHTML = `<div class="paper">${head('Schuldschein von ' + esc(s.vorname))}
-      ${ln((s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN') + ' ' + ii('k_saldo'), eur(Math.abs(s.saldo)) + ' €', 'big')}
+      ${ln((s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN') + ' ' + ii('k_saldo'), `<span class="${s.saldo > 0 ? 'neg' : s.saldo < 0 ? 'pos' : ''}">${s.saldo > 0 ? '−' : ''}${eur(Math.abs(s.saldo))} €</span>`, 'big')}
       <p class="small mut">${s.saldo < 0 ? 'Einkäufe werden von deinem Guthaben abgezogen. Ist es aufgebraucht, schreibst du wie gewohnt an.' : 'Bezahlen oder Guthaben aufladen: Betrag dem Betreiber geben, er trägt ihn ein.'}</p></div>
     <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen ${ii('k_entries')}</h2>${s.entries.length ? s.entries.map(e =>
