@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const VORNAMEN = ['Alex', 'Anna', 'Ben', 'Carla', 'Dana', 'Emil', 'Finn', 'Gina', 'Hanna', 'Ida', 'Jan', 'Karl', 'Lena', 'Mia', 'Noah', 'Ole', 'Paul', 'Rosa', 'Sam', 'Tom'];
 const names = n => VORNAMEN.slice(0, n).map((v, i) => ({ id: 'id-' + i, vorname: v }));
 const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e1', day: '2026-11-24', cents: -2000, kind: 'zahlung', undo: false }, { id: 'e2', day: '2026-11-24', cents: 750, kind: 'kauf', undo: false }],
-  products: [{ id: 'p1', name: 'Cola', cat: 'Getränke', cents: 100, normal: 100, sale: false, stock: 4 }] };
+  products: [{ id: 'p1', name: 'Cola', cat: 'Getränke', cents: 100, normal: 100, sale: false, stock: 4 }, { id: 'p2', name: 'Fanta', cat: 'Getränke', cents: 100, normal: 100, sale: false, stock: 0 }] };
 
 (async () => {
   const b = await chromium.launch();
@@ -50,6 +50,10 @@ const state = { vorname: 'Karl', consent: true, saldo: -1250, entries: [{ id: 'e
     await p.screenshot({ path: out + '/k-seite.png', fullPage: true });
     if (!(await p.$('text=Als App auf den Startbildschirm'))) throw new Error('Anleitung fehlt');
     await p.click('text=Als App auf den Startbildschirm'); await p.waitForSelector('text=Zum Home-Bildschirm');
+    if (await p.$('button.it:has-text("Fanta")')) throw new Error('Produkt ohne Bestand sichtbar');
+    if (!(await p.$('button.it:has-text("Cola")'))) throw new Error('Produkt mit Bestand fehlt');
+    await p.click('text=PIN ändern'); await p.fill('#f_o', '1234'); await p.fill('#f_n', '5678'); await p.fill('#f_w', '5679'); await p.click('#mform button.pri');
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('nicht gleich'), null, { timeout: 5000 });
     const sal = await p.$eval('.big span.pos', x => x.textContent).catch(() => null);
     if (sal !== '12,50 €') throw new Error('Guthaben nicht grün: ' + sal);
     await p.click('text=Abmelden'); await p.waitForSelector('text=Weiter als Karl');
