@@ -214,13 +214,17 @@ function pickQty(p, okLabel) {
         ${ln('Zusammen', eur(n * p.cents) + ' €', 'big')}
         <div class="row"><button type="button" class="btn" data-q="x">Abbrechen</button><button type="button" class="btn pri" data-q="ok">${okLabel}</button></div></div>`;
     };
-    draw(); modal.hidden = false;
+    const back = document.activeElement;
+    const close = v => { modal.onclick = null; document.removeEventListener('keydown', key); modal.hidden = true; modal.innerHTML = ''; if (back && back.focus) back.focus(); res(v); };
+    const key = e => { if (e.key === 'Escape') { e.preventDefault(); close(0); } };
+    draw(); modal.hidden = false; modal.querySelector('[data-q="ok"]').focus();
+    document.addEventListener('keydown', key);
     modal.onclick = e => {
       const b = e.target.closest('[data-q]'); if (!b) return;
       e.stopPropagation();
       const q = b.dataset.q;
-      if (q === 'x' || q === 'ok') { modal.onclick = null; modal.hidden = true; modal.innerHTML = ''; res(q === 'ok' ? n : 0); }
-      else { n = Number(q); draw(); }
+      if (q === 'x' || q === 'ok') close(q === 'ok' ? n : 0);
+      else { n = Number(q); draw(); modal.querySelector(`[data-q="${n}"]`).focus(); }
     };
   });
 }

@@ -7,25 +7,28 @@
     ['cola zero', 'can', '#1b1b1b', '#e41e2b'], ['cola light', 'can', '#c9ccd1', '#e41e2b'], ['vita cola', 'can', '#f2a900', '#c8102e'],
     ['cola', 'can', '#e41e2b', '#ffffff'], ['red bull', 'can', '#2b4c9b', '#c9ccd1'], ['monster energy zero', 'can', '#e6e6e6', '#79c143'],
     ['monster', 'can', '#151515', '#79c143'], ['effect', 'can', '#222222', '#8e44ad'], ['m-150', 'bottle', '#c0392b', '#f1c40f'],
-    ['lipton ice tea zero', 'can', '#f6d600', '#1d6fb8'], ['lipton', 'can', '#f6d600', '#e3001b'], ['vitaminwasser', 'bottle', '#c2185b', '#f8bbd0'],
+    ['lipton ice tea zero', 'can', '#f6d600', '#1d6fb8'], ['lipton', 'can', '#f6d600', '#e3001b'], ['vitaminwasser*', 'bottle', '#c2185b', '#f8bbd0'],
     ['apfelschorle', 'bottle', '#7cb342', '#dcedc8'], ['spezi', 'bottle', '#f39200', '#5d4037'], ['fassbrause', 'bottle', '#ffb300', '#6d4c41'],
     ['jarritos', 'bottle', '#ff7043', '#ffe0b2'], ['protein shake', 'bottle', '#455a64', '#cfd8dc'],
     ['twix', 'bar', '#c8102e', '#d4a017'], ['snickers', 'bar', '#5b3a29', '#1d4f9c'], ['mars', 'bar', '#111111', '#c8102e'],
     ['corny big chocolate banane', 'bar', '#f7d117', '#5b3a29'], ['corny big karamell', 'bar', '#c68a3e', '#f3e3c3'],
     ['corny big schoko', 'bar', '#5b3a29', '#f7d117'], ['corny', 'bar', '#e4003a', '#f8d7da'], ['golden bridge', 'bar', '#d9c7a3', '#7a5c2e'],
-    ['protein', 'bar', '#222222', '#f39200'], ['mr. tom', 'bar', '#f6c343', '#8d5524'],
+    ['protein*', 'bar', '#222222', '#f39200'], ['mr. tom', 'bar', '#f6c343', '#8d5524'],
     ['knoppers himbeer', 'waffle', '#ffffff', '#e85a8b'], ['knoppers joghurt', 'waffle', '#ffffff', '#7fb6e0'], ['knoppers', 'waffle', '#ffffff', '#1d4f9c'],
-    ['choceur', 'choc', '#6b2e1f', '#d9b38c'], ['kinder', 'choc', '#ffffff', '#e30613'],
-    ['haribo', 'bag', '#f2c200', '#e30613'], ['m&m', 'bag', '#5b3a29', '#f2c200'], ['beef jerky', 'bag', '#ece8e1', '#5a3a22'],
-    ['ültje', 'bag', '#1d6fb8', '#f2b134'], ['alesto', 'bag', '#2e7d32', '#ffcc80'], ['nüsse', 'bag', '#8d6e63', '#ffcc80'],
-    ['algen', 'bag', '#2e7d32', '#a5d6a7'], ['nudel', 'cup', '#d71920', '#fff3e0']
+    ['choceur', 'choc', '#6b2e1f', '#d9b38c'], ['kinder*', 'choc', '#ffffff', '#e30613'],
+    ['haribo', 'bag', '#f2c200', '#e30613'], ['m&m*', 'bag', '#5b3a29', '#f2c200'], ['beef jerky', 'bag', '#ece8e1', '#5a3a22'],
+    ['ültje', 'bag', '#1d6fb8', '#f2b134'], ['alesto', 'bag', '#2e7d32', '#ffcc80'], ['nüsse*', 'bag', '#8d6e63', '#ffcc80'],
+    ['algen*', 'bag', '#2e7d32', '#a5d6a7'], ['nudel*', 'cup', '#d71920', '#fff3e0']
   ];
   const BY_CAT = { 'Getränke': ['can', '#607d8b', '#eceff1'], 'Energy': ['can', '#263238', '#c0ca33'], 'Süßes': ['bar', '#8d6e63', '#ffe0b2'], 'Herzhaft': ['bag', '#795548', '#ffe0b2'] };
 
   function look(p) {
     // Stichwort muss am Wortanfang stehen, sonst passt z. B. „cola“ auf „Chocolate“
-    const n = ' ' + (p.name || '').toLowerCase().replace(/[-_/]/g, ' ');
-    for (const [k, shape, a, b] of RULES) if (n.includes(' ' + k)) return [shape, a, b];
+    const n = ' ' + (p.name || '').toLowerCase().replace(/[-_/,()]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+    for (const [k, shape, a, b] of RULES) {
+      const hit = k.endsWith('*') ? n.includes(' ' + k.slice(0, -1)) : n.includes(' ' + k + ' ');
+      if (hit) return [shape, a, b];
+    }
     return BY_CAT[p.cat] || ['bag', '#78909c', '#eceff1'];
   }
   const ln = '#1b1b1b';
