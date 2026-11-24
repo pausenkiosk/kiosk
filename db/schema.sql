@@ -693,6 +693,8 @@ create table if not exists deliveries (
   done_at timestamptz
 );
 -- Adventskalender: höchstens ein Gewinn pro Tag.
+alter table deliveries add column if not exists ledger_ids uuid[];
+alter table deliveries add column if not exists sale_ids uuid[];
 create table if not exists advent_wins (
   day date primary key,
   person_id uuid references persons(id) on delete set null,
@@ -808,7 +810,7 @@ end $$;
 -- Lieferung bestellen: p_items = [{"id": Produkt, "qty": n}], sofort gebucht
 create or replace function k_deliver(p_token text, p_items jsonb, p_office text) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare pid uuid := k_person(p_token); it jsonb; c int; total int := 0; lst jsonb := '[]'::jsonb; did uuid; o text := trim(coalesce(p_office, ''));
+declare pid uuid := k_person(p_token); it jsonb; c int; total int := 0; lst jsonb := '[]'::jsonb; did uuid; o text := trim(coalesce(p_office, '')); lids uuid[]; sids uuid[];
 begin
   if pid is null then return jsonb_build_object('ok', false, 'err', 'sitzung'); end if;
   perform k_cleanup();
@@ -829,9 +831,12 @@ begin
     total := total + c;
     lst := lst || jsonb_build_object('name', (select name from products where id = (it->>'id')::uuid), 'qty', (it->>'qty')::int);
   end loop;
-  -- kein Rückgängig für Lieferungen: alle Buchungen dieser Transaktion tragen ts = now()
-  update ledger set ts = null, sale_id = null where person_id = pid and kind = 'kauf' and ts = now();
-  insert into deliveries(person_id, office, items, total_cents) values (pid, o, lst, total) returning id into did;
+  -- Buchungen dieser Lieferung merken (für ein sauberes Storno); alle tragen ts = now()
+  select array_agg(id), array_agg(sale_id) filter (where sale_id is not null) into lids, sids
+    from ledger where person_id = pid and kind = 'kauf' and ts = now();
+  -- kein Rückgängig für Lieferungen
+  update ledger set ts = null, sale_id = null where id = any(lids);
+  insert into deliveries(person_id, office, items, total_cents, ledger_ids, sale_ids) values (pid, o, lst, total, lids, sids) returning id into did;
   perform k_notify('Kiosk-Express: neue Lieferung', 'Büro ' || o || ', ' || jsonb_array_length(lst) || ' Posten. Details in der Kiosk-App.');
   return jsonb_build_object('ok', true, 'id', did, 'summe', total, 'advent', k_advent(pid));
 end $$;
@@ -865,7 +870,15 @@ begin
   select * into d from deliveries where id = p_id and status in ('neu', 'unterwegs') for update;
   if not found then return 'fehlt'; end if;
   if p_status = 'storniert' then
-    insert into ledger(person_id, day, amount_cents, kind) values (d.person_id, today(), -d.total_cents, 'korrektur');
+    if d.ledger_ids is not null then
+      -- Storno nimmt die Lieferung vollständig zurück: Buchungen, Verkäufe und Bestand
+      update products p set stock = p.stock + x.qty
+        from (select product_id, sum(qty) qty from sales where id = any(d.sale_ids) group by product_id) x where p.id = x.product_id;
+      delete from sales where id = any(d.sale_ids);
+      delete from ledger where id = any(d.ledger_ids);
+    else
+      insert into ledger(person_id, day, amount_cents, kind) values (d.person_id, today(), -d.total_cents, 'korrektur');
+    end if;
   end if;
   update deliveries set status = p_status,
     office = case when p_status in ('geliefert', 'storniert') then null else office end,
