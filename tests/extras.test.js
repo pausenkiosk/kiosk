@@ -292,8 +292,9 @@ module.exports = async function extras(browser) {
   });
 
   /* ---------- Adventskalender (Gewinnliste advent_pool mit Gewichten, ab v34) ---------- */
-  const POOL = '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":11}]';
-  const GEW = { 'Knoppers': 40, 'Corny Big Chocolate Banane': 35, 'Choceur Peanut Bits': 8, 'Corny Erdbeere': 8, 'Golden Bridge Müsliriegel': 6, 'Choceur Milk & Crisp': 11 };   // Summe 108
+  const POOL = '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":8},{"match":"Choceur Milk%","w":8}]';
+  const GEW = { 'Knoppers': 40, 'Corny Big Chocolate Banane': 35, 'Choceur Peanut Bits': 8, 'Corny Erdbeere': 8, 'Golden Bridge Müsliriegel': 8, 'Choceur Milk & Crisp': 8 };
+const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
   const ADV = ['Knoppers', 'Knoppers Joghurt', 'Knoppers Alt', 'Corny Big Chocolate Banane', 'Corny Big Karamell', 'Corny Big Schoko', 'Corny Erdbeere', 'Golden Bridge Müsliriegel', 'Choceur Milk & Crisp', 'Kinder Country', 'Choceur Peanut Bits'];
   const pool = v => sql(`insert into settings values ('advent_pool', '${v.replace(/'/g, "''")}') on conflict (key) do update set value = excluded.value`);
   const mhd = async list => { await sql(`delete from purchase_items where purchase_id is null; ` + list.map(([n, d]) => `insert into purchase_items(purchase_id, product_id, qty, cents, mhd) values (null, '${prod[n]}', 1, 0, '${isoDay(d)}');`).join(' ')); };
@@ -339,7 +340,7 @@ module.exports = async function extras(browser) {
     await sql(`delete from advent_wins; delete from alerts where text like 'Adventskalender:%'; delete from sales where kind = 'verlust' and product_id in (select id from products where category = 'Adventtest')`); await vorrat(5);
     eq(J(rows), J([{ p: 'Knoppers', n: 100 }]), 'Ergebnis der Ziehungen (in der Gruppe gewinnt „Knoppers“ vor „Knoppers Alt“/„Joghurt“ nach Name)');
   });
-  await S('Verteilung über 2000 simulierte Tage entspricht 40/35/8/8/6/11 (von 108); Corny Big Karamell/Schoko und Kinder Country nie', async () => {
+  await S('Verteilung über 2000 simulierte Tage entspricht der Gewinnliste (40/35/8/8/8/8 von 107); Corny Big Karamell/Schoko und Kinder Country nie', async () => {
     await pool(POOL); await mhd([]);
     await sql(`update products set stock = 100000 where category = 'Adventtest'`);
     const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Ida}'; begin for i in 1..2000 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
@@ -348,7 +349,7 @@ module.exports = async function extras(browser) {
     const n = Object.fromEntries(rows.map(r => [r.p, r.n]));
     console.log('      Verteilung 2000 Ziehungen: ' + rows.map(r => `${r.p} ${(r.n / 20).toFixed(1)} %`).join(' | '));
     const bad = [];
-    for (const [p, w] of Object.entries(GEW)) { const soll = w * 100 / 108, pct = (n[p] || 0) / 20, tol = soll >= 20 ? 4 : 2.5; if (Math.abs(pct - soll) > tol) bad.push(`${p}: ${pct.toFixed(1)} % statt ${soll.toFixed(1)} %`); }
+    for (const [p, w] of Object.entries(GEW)) { const soll = w * 100 / SUMME, pct = (n[p] || 0) / 20, tol = soll >= 20 ? 4 : 2.5; if (Math.abs(pct - soll) > tol) bad.push(`${p}: ${pct.toFixed(1)} % statt ${soll.toFixed(1)} %`); }
     for (const p of ['Corny Big Karamell', 'Corny Big Schoko', 'Kinder Country', 'Knoppers Joghurt', 'Knoppers Alt', '(kein Gewinn)']) if (n[p]) bad.push(`${p}: ${n[p]}×`);
     expect(bad.length === 0, bad.join(' · '));
   });
