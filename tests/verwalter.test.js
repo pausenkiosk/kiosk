@@ -822,6 +822,9 @@ module.exports = async function verwalter(browser) {
   const more = async (name, a, x) => {
     await idle(page); await hideToast(page);
     await prow(page, name).locator('[data-a="a-more"]').click();
+    await page.locator('#modal:not([hidden]) #f_a').waitFor();
+    // ab v21 gibt es statt „korrigieren (+ / −)“ die Auswahl Schulden/Guthaben übertragen (Betrag ohne Vorzeichen)
+    if (a === 'fix' && !(await page.locator('#modal #f_a option[value="fix"]').count())) { a = /^[-−]/.test(x) ? 'guthaben' : 'schuld'; x = x.replace(/^[-−]/, ''); }
     await fillModal(page, name, { a, x });
   };
   await S('Leute: neue PIN – braucht 4 Ziffern', async () => {

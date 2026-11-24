@@ -156,7 +156,7 @@ module.exports = async function info(browser) {
       const { error } = await SB.from('ledger').insert(rows); if (error) throw new Error(error.message);
     }, [vera, isoDay()]);
     await kp.reload(); await see(kp, 'Schuldschein von Vera');
-    eq(await kp.locator('#app .it', { hasText: 'Korrektur' }).count(), 31, 'angezeigte Buchungen bei 31 vorhandenen');
+    eq(await kp.locator('#app .it', { hasText: /Korrektur|Übertrag/ }).count(), 31, 'angezeigte Buchungen bei 31 vorhandenen');
   });
   await K('Text Rangliste „Welche Produkte jemand kauft, wird nicht gespeichert“: 5 Minuten nach dem Kauf ist die Verbindung Kauf–Produkt weg, auch wenn niemand die App öffnet', async () => {
     await idle(kp); await hideToast(kp);
