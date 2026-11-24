@@ -265,6 +265,24 @@ module.exports = async function extras(browser) {
     await sql(`delete from settings where key = 'ntfy_topic'`);   // sofort wieder entfernen: Testbestellungen sollen nichts an ntfy.sh senden
     expect(/^kiosk-[0-9a-f]{24}$/.test(topic || ''), 'Kanal: ' + topic);
   });
+  await S('Benachrichtigung mit Kanal: Versand geht ohne Fehler an pg_net (Ziel auf das Testprojekt umgelenkt, nichts an ntfy.sh)', async () => {
+    const def = (await sql(`select pg_get_functiondef('public.k_notify(text,text)'::regprocedure) d`))[0].d;
+    expect(def.includes("'https://ntfy.sh/"), 'k_notify sendet nicht an https://ntfy.sh/');
+    const kopie = def.replace(/FUNCTION public\.k_notify\(/i, 'FUNCTION public.k_notify_umgelenkt(').replace(/'https:\/\/ntfy\.sh\/'/g, `'https://${CFG.ref}.supabase.co/rest/v1/'`);
+    expect(!kopie.includes('ntfy.sh/') && kopie.includes('k_notify_umgelenkt'), 'Umlenken der Kopie fehlgeschlagen');
+    const vor = (await sql(`select coalesce(max(id), 0)::bigint n from net._http_response`))[0].n, a0 = (await db('alerts', 'id')).length;
+    await sql(kopie + `; revoke execute on function public.k_notify_umgelenkt(text, text) from public, anon, authenticated;`);
+    try {
+      await sql(`insert into settings values ('ntfy_topic', 'kiosk-${'0'.repeat(24)}') on conflict (key) do update set value = excluded.value; select public.k_notify_umgelenkt('Kiosk-Express: neue Lieferung', 'Büro 3.14, 1 Posten.')`);
+      let r = [];
+      for (let i = 0; i < 20 && !r.length; i++) { await page.waitForTimeout(500); r = await sql(`select status_code, error_msg, timed_out from net._http_response where id > ${vor}`); }
+      const neu = (await db('alerts', 'text')).slice(a0).map(x => x.text).filter(t => /Benachrichtigung/.test(t));
+      eq(neu.length, 0, 'Hinweise „Benachrichtigung konnte nicht gesendet werden“');
+      expect(r.length === 1 && r[0].status_code && !r[0].error_msg && !r[0].timed_out, 'Antwort des Versands: ' + JSON.stringify(r));
+    } finally {
+      await sql(`drop function if exists public.k_notify_umgelenkt(text, text); delete from settings where key = 'ntfy_topic'`);
+    }
+  });
   await S('Rechte: ohne Anmeldung kein Zugriff auf Lieferungen, Gewinne und interne Funktionen', async () => {
     const bad = [];
     for (const t of ['deliveries', 'advent_wins']) { const r = await api.get(`/rest/v1/${t}?select=*`); if (r.status() < 400) bad.push(`${t} lesbar (${r.status()})`); }
