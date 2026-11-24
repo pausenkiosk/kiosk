@@ -39,6 +39,8 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein – in der F
 | `wunsch.test.js` | Wunsch abgeben (Kollege), Zusammenzählen gleicher Wünsche, Grenzen, Liste und „Erledigt“ beim Verwalter |
 | `auszahlung.test.js` | Guthaben auszahlen (Teil-/Vollauszahlung, Grenzen, gleichzeitige Auszahlungen), Kassensturz mit Ein- und Auszahlungen |
 | `info.test.js` | Info-Knöpfe: vorhanden, Tippfläche, Text, nicht im Druck; nachprüfbare Aussagen der Texte gegen das Verhalten |
+| `uebertrag.test.js` | Schulden/Guthaben vom Papier-Schuldschein übertragen (Vorzeichen, kein Kassenbuch-Eintrag, Anzeige beim Kollegen) |
+| `anmeldung.test.js` | Kollegen-Anmeldemaske: gemerkter Name, Suche ab 13 Personen, Anleitung für den Startbildschirm, Kiosk-Code in der Adresse |
 | `uebergang.test.js` | (nur auf Wunsch, für den Wechsel von v14 auf Ausbaustufe 3) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
 | `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
 | `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |
