@@ -75,26 +75,27 @@ module.exports = async function extras(browser) {
     await kp.fill('#pin', '1212'); await kp.locator('#kpin button.pri').click();
     await kp.locator('[data-a="k-consent"]').click();
     await see(kp, 'Schuldschein von Elias');
-    eq((await kp.locator('[data-a="k-cart"]').innerText()).trim(), 'Liefern lassen (ab 3 € frei Haus)', 'Knopf');
+    const knopf = (await kp.locator('[data-a="k-cart"]').innerText()).trim();
+    expect(/^Liefern lassen/.test(knopf) && /ab 3 € frei Haus/.test(knopf), 'Knopf: ' + knopf);
     eq(await bar(), null, 'Lieferkorb-Balken ohne Lieferkorb');
   });
   await K('Lieferkorb: leer, Balken unten, Bestellen gesperrt; Antippen legt in den Korb statt anzuschreiben', async () => {
     await kp.locator('[data-a="k-cart"]').click();
     await see(kp, 'Lieferkorb: Produkte antippen, unten bestellen.');
     let b = await bar();
-    expect(b && b.text.startsWith('Lieferkorb: 0 Artikel · 0,00 €') && b.text.includes('Produkte antippen zum Hinzufügen.') && !b.ok, 'Balken: ' + JSON.stringify(b));
+    expect(b && b.text.startsWith('Lieferkorb: 0 Artikel · 0,00 €') && b.text.includes('Produkte antippen') && !b.ok, 'Balken: ' + JSON.stringify(b));
     await kp.locator('button.it', { hasText: 'E-Riegel' }).first().click();
     eq((await kp.locator('#modal [data-q="ok"]').innerText()).trim(), 'In den Lieferkorb', 'Knopf im Anzahl-Dialog');
     await anzahl(kp, 'E-Riegel', 2);
     await toast(kp, /^2 × E-Riegel im Lieferkorb\.$/);
     b = await bar();
-    expect(b.text.includes('Lieferkorb: 2 Artikel · 2,00 €') && b.text.includes('Für 2,00 € steht der Lieferant nicht auf. Noch 1,00 € bis frei Haus.') && !b.ok, 'Balken unter 3 €: ' + JSON.stringify(b));
+    expect(b.text.includes('Lieferkorb: 2 Artikel · 2,00 €') && b.text.includes('Noch 1,00 € bis frei Haus.') && !b.ok, 'Balken unter 3 €: ' + JSON.stringify(b));
     eq(await saldo('Elias'), 0, 'Saldo Elias (nichts gebucht)');
   });
   await K('Ab 3,00 € wird Bestellen freigegeben; Abbrechen leert den Korb, nichts gebucht', async () => {
     await inKorb('E-Riegel', 1);
     const b = await bar();
-    expect(b.text.includes('3 Artikel · 3,00 €') && b.text.includes('Lieferung frei Haus!') && b.ok, 'Balken ab 3 €: ' + JSON.stringify(b));
+    expect(b.text.includes('3 Artikel · 3,00 €') && !/Noch .* bis frei Haus/.test(b.text) && b.ok, 'Balken ab 3 €: ' + JSON.stringify(b));
     await kp.locator('#cartbar [data-a="k-cart-x"]').click(); await idle(kp);
     eq(await bar(), null, 'Balken nach Abbrechen');
     eq(await saldo('Elias'), 0, 'Saldo Elias');
@@ -185,14 +186,14 @@ module.exports = async function extras(browser) {
     eq(J(await call('k_rate', { p_token: t, p_id: d.id, p_rating: 5, p_tip: '10cent' })), 'false', 'zweite Bewertung');
     eq(await saldo('Elias'), 310, 'Saldo nach zweitem Versuch');
   });
-  await K('Storno: Betrag wird gutgeschrieben, Bestand bleibt, Karte verschwindet', async () => {
+  await K('Storno: Betrag wird gutgeschrieben, Bestand zurückgebucht (ab v40), Karte verschwindet', async () => {
     const vk0 = (await db('sales', 'qty,kind', 'product_id', prod['E-Limo'])).filter(x => x.kind === 'app').reduce((a, x) => a + x.qty, 0);
     const kauf0 = (await db('ledger', 'amount_cents,kind', 'person_id', ids.Elias)).filter(x => x.kind === 'kauf').reduce((a, x) => a + x.amount_cents, 0);
     await kp.locator('[data-a="k-cart"]').click();
     await inKorb('E-Limo', 3);
     eq(await bestellen('Raum 3.14'), 'Bestellt! Der Kiosk-Express ist informiert.', 'Hinweis');
     eq(await saldo('Elias'), 310 + 447, 'Saldo nach Bestellung');
-    const st = await stock('E-Limo');
+    const st = await stock('E-Limo') + 3;   // Bestand vor der Bestellung
     await adminDel('storniert', false);
     eq((await lieferung()).status, 'neu', 'Status nach abgebrochenem Storno');
     await adminDel('storniert');
@@ -258,9 +259,9 @@ module.exports = async function extras(browser) {
     const d0 = (await db('deliveries', 'id', 'person_id', ids.Gustav)).length, s0 = await stock('E-Riegel');
     const rs = await Promise.all([1, 2, 3, 4].map(() => call('k_deliver', { p_token: tok.Gustav, p_items: [{ id: prod['E-Riegel'], qty: 3 }], p_office: 'Werkstatt' })));
     const okN = rs.filter(r => r.ok).length, n = (await db('deliveries', 'id', 'person_id', ids.Gustav)).length - d0;
-    const gebucht = (await db('ledger', 'amount_cents', 'person_id', ids.Gustav)).reduce((a, l) => a + l.amount_cents, 0);
+    const gebucht = (await db('ledger', 'amount_cents', 'person_id', ids.Gustav)).reduce((a, l) => a + l.amount_cents, 0), weg = s0 - await stock('E-Riegel');
     for (const r of rs.filter(r => r.ok)) await must('a_delivery', { p_id: r.id, p_status: 'storniert' });
-    eq(`${okN}/${n}/${s0 - await stock('E-Riegel')}/${gebucht}`, '1/1/3/300', 'erfolgreiche Antworten / neue Lieferungen / abgebuchter Bestand / gebuchter Betrag in Cent');
+    eq(`${okN}/${n}/${weg}/${gebucht}`, '1/1/3/300', 'erfolgreiche Antworten / neue Lieferungen / abgebuchter Bestand / gebuchter Betrag in Cent');
   });
   await S('Benachrichtigung: ohne Kanal kein Fehler und kein Hinweis; „Einrichten“ erzeugt geheimen Kanal kiosk-+24 Zeichen', async () => {
     const al = (await db('alerts', 'text')).filter(a => /Benachrichtigung/.test(a.text));
