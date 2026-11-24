@@ -2,7 +2,7 @@
 /* Francos Wünsche (ab app.js v25):
    3. Kollegen-Seite „PIN ändern“: neue PIN zweimal eingeben.
    4. Kollegen sehen nur Produkte, die laut App gerade im Regal liegen (Bestand über 0). */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, lnIs, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, anzahl, pickName, see, lnIs, anonApi } = require('./lib');
 
 module.exports = async function sichtbar(browser) {
   setGroup('Sichtbare Produkte und PIN-Wiederholung');
@@ -23,7 +23,7 @@ module.exports = async function sichtbar(browser) {
     produkte: [...p.querySelectorAll('button.it')].map(b => b.children[1].textContent.trim()).filter(n => n.startsWith('S-')),
     gruppen: [...p.querySelectorAll('h2')].map(h => h.textContent.replace(/\s*i$/, '').trim()).filter(g => g.startsWith('Sichttest')),
     aus: [...p.querySelectorAll('button.it')].filter(b => /\baus\b/.test(b.children[2].textContent)).length }));
-  const kauf = async (name, qty) => { await idle(kp); await hideToast(kp); await kp.locator('button.it', { hasText: name }).click(); await fillModal(kp, name, { qty }); await toast(kp, /angeschrieben/); await idle(kp); };
+  const kauf = async (name, qty) => { await idle(kp); await hideToast(kp); await kp.locator('button.it', { hasText: name }).click(); await anzahl(kp, name, qty); await toast(kp, /angeschrieben/); await idle(kp); };
 
   await S('Vorbereitung: anmelden, Testprodukte (voll, leer, letztes Stück, Abverkauf) und Kollegin Zoe anlegen', async () => {
     await page.goto(CFG.url + '#verwaltung');

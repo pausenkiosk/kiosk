@@ -2,7 +2,7 @@
 /* Verwalter-Bereich komplett: Anmeldung, Bon, Regal (inkl. Löschen), Fotos, Einkauf (von Hand, Ansage, Bon-Foto),
    Haltbarkeit, Kasse, Leute, Sicherung, Nachricht an Claude.
    Läuft nach dem Kollegen-Teil: Ben hat 1 Wasser angeschrieben (0,80 €), Clara ist gesperrt. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, loggedOut, pickName, see, row, prow, rowHas, lnIs, anonApi, sql, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, abgleich, anzahl, loggedOut, pickName, see, row, prow, rowHas, lnIs, anonApi, sql, isoDay } = require('./lib');
 
 const dshort = iso => { const [, m, d] = iso.split('-'); return `${d}.${m}.`; };
 
@@ -62,7 +62,7 @@ module.exports = async function verwalter(browser) {
     await lnIs(page, 'KASSENSTAND', '33,50');
     await lnIs(page, 'Einnahmen Monat', '50,00');
     await lnIs(page, 'Offene Schuldscheine', '10,30');   // Emil 4,50 + Anna 2,00 + Gerd 3,00 + Ben 0,80
-    await lnIs(page, 'Fehlbetrag letzte Zählung', '–');
+    await abgleich(page, null);
     await see(page, 'Du hast noch keine Sicherung heruntergeladen. Bitte jetzt sichern.');
   });
   await S('Bon: Datum und Kalenderwoche in der Kopfzeile', async () => {
@@ -674,9 +674,9 @@ module.exports = async function verwalter(browser) {
     await idle(page);
     eq((await db('cash_counts', 'id')).length, 1, 'Anzahl Kassenstürze');
   });
-  await S('Bon: Fehlbetrag vergleicht Zählung und Kassensturz', async () => {
+  await S('Bon: Abgleich Ware/Kasse nach dem ersten Kassensturz', async () => {
     await tab('bon');
-    await lnIs(page, 'Fehlbetrag letzte Zählung', '1,00');   // 2 Cola à 1,60 + 1 Wasser à 0,80 fehlen, 3,00 in der Kasse
+    await abgleich(page, 100, null);   // alt: 2 Cola à 1,60 + 1 Wasser à 0,80 fehlen, 3,00 in der Kasse; neu: erst ab dem zweiten Kassensturz
     await lnIs(page, 'KASSENSTAND', '11,18');
   });
   await S('Kasse: Buchung von Hand (Einnahme)', async () => {
@@ -982,7 +982,7 @@ module.exports = async function verwalter(browser) {
     await kpage.reload();
     await see(kpage, 'Schuldschein von Anna');
     await kpage.locator('button.it', { hasText: 'Wasser' }).click();
-    await fillModal(kpage, 'Wasser', { qty: 1 });
+    await anzahl(kpage, 'Wasser', 1);
     await toast(kpage, /Wasser angeschrieben/);
     eq(await saldo('Anna'), before + 80, 'Schuldschein Anna nach dem Anschreiben');
   });

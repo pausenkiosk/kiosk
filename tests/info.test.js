@@ -1,6 +1,6 @@
 'use strict';
 /* Info-Knöpfe („i“) an den Überschriften: vorhanden, antippbar, Text passt zum Verhalten der App, nicht im Druck. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, row, sql, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, anzahl, pickName, see, row, sql, isoDay } = require('./lib');
 
 module.exports = async function info(browser) {
   setGroup('Info-Knöpfe');
@@ -163,7 +163,7 @@ module.exports = async function info(browser) {
   const kaufen = async () => {
     await idle(kp); await hideToast(kp);
     await kp.locator('button.it').first().click();
-    await kp.locator('#modal button.pri').click();
+    await anzahl(kp, '', 1);
     await toast(kp, /angeschrieben/);
     await idle(kp);
   };

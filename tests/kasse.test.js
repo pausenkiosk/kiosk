@@ -2,7 +2,7 @@
 /* Kassensturz nach Kasseninhalt und Storno (Ausbaustufe 3).
    Der Teil räumt zuerst Kassenstürze, Zahlungs- und Barverkaufs-Buchungen sowie Zähl-Abgänge ab und rechnet dann alles neu durch.
    Bedienung über die Oberfläche, Ergebnis jeweils in der Datenbank nachgelesen. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, row, prow, lnIs, lnValue, sql, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, abgleich, see, row, prow, lnIs, lnValue, sql, isoDay } = require('./lib');
 
 const toCents = s => Math.round(Number(s.replace(/\./g, '').replace(',', '.').replace('−', '-')) * 100);
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -81,7 +81,7 @@ module.exports = async function kasse(browser) {
     await page.reload();
     await see(page, 'KASSENSTAND');
     stand0 = toCents(await lnValue(page, 'KASSENSTAND'));
-    await lnIs(page, 'Fehlbetrag letzte Zählung', '–');
+    await abgleich(page, null);
   });
 
   /* ---------- Kassensturz ---------- */
@@ -92,7 +92,7 @@ module.exports = async function kasse(browser) {
     const j = await barRow(c.id);
     eq(`${j.text}/${j.in_cents}/${j.kind}`, 'Barverkäufe/500/bar', 'Kassenbuch-Zeile');
     plus += 500; await standIs();
-    await lnIs(page, 'Fehlbetrag letzte Zählung', eur(ware - 500));
+    await abgleich(page, ware - 500, null);   // neu: erst ab dem zweiten Kassensturz
   });
   await S('Zahlung, dann Kassensturz am selben Tag: Zahlung wird abgezogen', async () => {
     await pay('Gerd', '1,00'); plus += 100;
@@ -129,7 +129,7 @@ module.exports = async function kasse(browser) {
   });
   await S('Bon: Fehlbetrag rechnet mit dem Barverkauf (hier: 2,00 € fehlen in der Kasse)', async () => {
     await tab('bon');
-    await lnIs(page, 'Fehlbetrag letzte Zählung', '2,00');
+    await abgleich(page, 200, null);   // neu: zwischen den letzten beiden Kassenstürzen wurde nicht gezählt
   });
   await S('Kasse: Storno-Knopf nur bei Handbuchung, Kassensturz und Einkauf mit Verweis', async () => {
     await tab('kasse');
@@ -156,7 +156,7 @@ module.exports = async function kasse(browser) {
     const c = await last();
     eq(`${c.day}/${c.cents}/${c.bar_cents}`, `${isoDay()}/600/380`, 'Kassensturz (Tag/Inhalt/bar)');
     plus += 380; await standIs();
-    await lnIs(page, 'Fehlbetrag letzte Zählung', eur(wasser.price_cents - 380));
+    await abgleich(page, wasser.price_cents - 380);
   });
   await S('Kassensturz: negativer Betrag wird abgelehnt (direkter Aufruf)', async () => {
     const r = await rpc('a_cash_box', { p_cents: -1 });
@@ -294,7 +294,7 @@ module.exports = async function kasse(browser) {
     eq(await sturz(eur(cola.price_cents)), `Gebucht: ${eur(cola.price_cents)} € Barverkäufe.`, 'Hinweis');
     plus += cola.price_cents;
     await tab('bon');
-    await lnIs(page, 'Fehlbetrag letzte Zählung', '0,00');   // 1 Cola fehlt laut Zählung, genau ihr Preis lag in der Kasse
+    await abgleich(page, 0);   // 1 Cola fehlt laut Zählung, genau ihr Preis lag in der Kasse
   });
   await S('Keine Fehler in der Browser-Konsole (Kassensturz und Storno)', async () => {
     const real = page.problems.filter(p => !/favicon|nicht erlaubt|status of 400/i.test(p));

@@ -130,6 +130,10 @@ module.exports = async function anmeldung(browser) {
     await kp.locator('[data-a="k-forget"]').click();
     await idle(kp);
     const txt = await kp.locator('#app').innerText();
+    if (txt.includes('merkt sich deinen Namen nicht')) {   // ab v26
+      expect(txt.includes('Dein Handy merkt sich deinen Namen nicht. Bei der nächsten Anmeldung wird er wieder gemerkt.'), 'Text nach „Vergessen“: ' + txt.slice(-300));
+      eq(await kp.locator('[data-a="k-forget"]').count(), 0, '„Vergessen“-Knopf nach dem Vergessen');
+    }
     await logout();
     expect(!txt.includes('Dein Handy merkt sich deinen Namen für die nächste Anmeldung.'), 'Nach „Vergessen“ steht weiter da: „Dein Handy merkt sich deinen Namen für die nächste Anmeldung.“ (der Name ist aber gelöscht und wird erst bei der nächsten Anmeldung wieder gemerkt)');
   });
@@ -224,7 +228,9 @@ module.exports = async function anmeldung(browser) {
     const d = page.locator('#app .poster details', { hasText: 'Als App auf den Startbildschirm' });
     eq(await d.count(), 1, 'Anleitungen beim QR-Code');
     await d.locator('summary').click();
-    expect((await d.innerText()).includes('„Zum Home-Bildschirm“'), 'Text der Anleitung');
+    const anl = await d.innerText();
+    expect(anl.includes('„Zum Home-Bildschirm“'), 'Text der Anleitung');
+    expect(!anl.includes('Diese Seite'), 'Anleitung in der Verwaltung spricht von „Diese Seite“ statt vom Kiosk-Link: ' + anl.slice(0, 160));
     await page.emulateMedia({ media: 'print' });
     try { expect(!(await d.isVisible()), 'Anleitung steht im gedruckten Aushang'); expect(!(await page.locator('#app .poster').innerText()).includes('Startbildschirm'), 'Text der Anleitung im Druck'); }
     finally { await page.emulateMedia({ media: 'screen' }); }

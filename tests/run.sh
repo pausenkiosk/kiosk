@@ -15,7 +15,7 @@
 #   KIOSK_SKIP_SEED=1       Testdaten nicht neu einspielen
 #   KIOSK_TEST_PORT         Standard: 8765
 #
-# Aufruf: tests/run.sh [sperren|kollege|verwalter|kasse|guthaben|wunsch|auszahlung|info|uebertrag|anmeldung|liste|sichtbar|grenzen|uebergang ...]   (ohne Angabe: alles)
+# Aufruf: tests/run.sh [sperren|kollege|verwalter|kasse|guthaben|wunsch|auszahlung|info|uebertrag|anmeldung|liste|sichtbar|kacheln|grenzen|uebergang ...]   (ohne Angabe: alles)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -58,10 +58,11 @@ cleanup() { [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true; rm -rf "$TMP"; }
 trap cleanup EXIT
 if [ -n "${KIOSK_APP_REF:-}" ]; then
   echo "App-Fassung: $KIOSK_APP_REF ($(git rev-parse --short "$KIOSK_APP_REF"))"
-  git archive "$KIOSK_APP_REF" index.html app.js style.css vendor icon-180.png icon-512.png | tar -x -C "$TMP"
+  git archive "$KIOSK_APP_REF" | tar -x -C "$TMP"
 else
-  cp -r index.html app.js style.css vendor icon-180.png icon-512.png "$TMP/"
+  for f in *; do case "$f" in tests|db) ;; *) cp -r "$f" "$TMP/" ;; esac; done
 fi
+rm -rf "$TMP/tests" "$TMP/db"   # nur die App ausliefern
 echo "Getestet wird $(grep -o 'app.js?v=[0-9]*' "$TMP/index.html")"
 python3 - "$TMP" "$ECHT" <<'PY'
 import os, re, sys
