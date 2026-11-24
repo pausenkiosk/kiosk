@@ -42,7 +42,7 @@ module.exports = async function extras(browser) {
     await idle(page);
   };
 
-  await S('Vorbereitung: anmelden, Testprodukte und Personen (Elias, Frieda, Gustav, Hilde, Ida) anlegen', async () => {
+  await S('Vorbereitung: anmelden, Testprodukte und Personen (Elias, Frieda, Gustav, Hilde, Irma) anlegen', async () => {
     await page.goto(CFG.url + '#verwaltung');
     await page.locator('#alog').waitFor();
     await page.fill('#em', CFG.email); await page.fill('#pw', CFG.pw);
@@ -59,9 +59,9 @@ module.exports = async function extras(browser) {
       if (error) throw new Error(error.message); return data;
     });
     rows.forEach(r => { prod[r.name] = r.id; });
-    for (const [n, p] of [['Elias', '1212'], ['Frieda', '2323'], ['Gustav', '3434'], ['Hilde', '4545'], ['Ida', '5656']]) ids[n] = await must('a_person', { p_vorname: n, p_pin: p });
+    for (const [n, p] of [['Elias', '1212'], ['Frieda', '2323'], ['Gustav', '3434'], ['Hilde', '4545'], ['Irma', '5656']]) ids[n] = await must('a_person', { p_vorname: n, p_pin: p });
     api = await anonApi();
-    for (const [n, p] of [['Frieda', '2323'], ['Gustav', '3434'], ['Hilde', '4545'], ['Ida', '5656']]) {
+    for (const [n, p] of [['Frieda', '2323'], ['Gustav', '3434'], ['Hilde', '4545'], ['Irma', '5656']]) {
       const l = await call('k_login', { p_code: code, p_person: ids[n], p_pin: p }); expect(l.ok, 'Anmeldung ' + n); tok[n] = l.token;
       await call('k_consent', { p_token: l.token });
     }
@@ -335,7 +335,7 @@ const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
     await sql(`update products set stock = 100000 where category = 'Adventtest'`); await mhd([]);
     await pool('[{"match":"Corny Erdbeere%","w":99},{"match":"Knoppers%","w":1}]');
     await sql(`update products set stock = 0 where id = '${prod['Corny Erdbeere']}'`);
-    const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Ida}'; begin for i in 1..100 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
+    const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Irma}'; begin for i in 1..100 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
       select coalesce(p, '(kein Gewinn)') p, count(*)::int n from sim group by 1 order by 1`);
     await sql(`delete from advent_wins; delete from alerts where text like 'Adventskalender:%'; delete from sales where kind = 'verlust' and product_id in (select id from products where category = 'Adventtest')`); await vorrat(5);
     eq(J(rows), J([{ p: 'Knoppers', n: 100 }]), 'Ergebnis der Ziehungen (in der Gruppe gewinnt „Knoppers“ vor „Knoppers Alt“/„Joghurt“ nach Name)');
@@ -343,7 +343,7 @@ const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
   await S('Verteilung über 2000 simulierte Tage entspricht der Gewinnliste (40/35/8/8/8/8 von 107); Corny Big Karamell/Schoko und Kinder Country nie', async () => {
     await pool(POOL); await mhd([]);
     await sql(`update products set stock = 100000 where category = 'Adventtest'`);
-    const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Ida}'; begin for i in 1..2000 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
+    const rows = await sql(`create temp table sim(p text); do $$ declare pid uuid := '${ids.Irma}'; begin for i in 1..2000 loop delete from advent_wins; insert into sim select k_advent(pid)->>'produkt'; end loop; end $$;
       select coalesce(p, '(kein Gewinn)') p, count(*)::int n from sim group by 1 order by 2 desc`);
     await sql(`delete from advent_wins; delete from alerts where text like 'Adventskalender:%'; delete from sales where kind = 'verlust' and product_id in (select id from products where category = 'Adventtest'); update products set stock = 5 where category = 'Adventtest'`);
     const n = Object.fromEntries(rows.map(r => [r.p, r.n]));
@@ -367,7 +367,7 @@ const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
   });
   await S('Tage ohne Kauf werden nicht nachgeholt: nach drei Tagen ohne Gewinn heute trotzdem nur ein Gewinn', async () => {
     await zeitraum(-3, 17); await vorrat(5); await mhd([]);
-    const rs = [await kauf('Frieda'), await kauf('Gustav'), await kauf('Ida')];
+    const rs = [await kauf('Frieda'), await kauf('Gustav'), await kauf('Irma')];
     eq(rs.map(r => r.advent.gewonnen).join(','), 'true,false,false', 'Gewinne bei drei Käufen heute');
     eq((await db('advent_wins', 'day')).length, 1, 'Einträge insgesamt');
     eq(rs[0].advent.tag, 4, 'Türchen');
@@ -425,8 +425,8 @@ const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
     await sql(`delete from advent_wins; insert into advent_wins(day, person_id) values ('${isoDay(-1)}', '${ids.Hilde}')`);
     let r = await kauf('Hilde');
     eq(r.advent.gewonnen, false, 'Hilde vor der Mitte (hat schon 1)');
-    r = await kauf('Ida');
-    eq(r.advent.gewonnen, true, 'Ida (noch kein Gewinn) gewinnt danach am selben Tag');
+    r = await kauf('Irma');
+    eq(r.advent.gewonnen, true, 'Irma (noch kein Gewinn) gewinnt danach am selben Tag');
     await zeitraum(-15, 5);   // Mitte vor 5 Tagen
     await sql(`insert into advent_wins(day, person_id) values ('${isoDay(-1)}', '${ids.Hilde}')`);
     r = await kauf('Hilde');
@@ -438,7 +438,7 @@ const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
   await S('Gleichzeitige Käufe am selben Tag: genau ein Gewinner, Gewinn nur einmal abgebucht', async () => {
     await zeitraum(-1, 19); await vorrat(5);
     tok.Elias = await kp.evaluate(() => localStorage.getItem('ktoken'));
-    const who = ['Frieda', 'Gustav', 'Ida', 'Elias'];
+    const who = ['Frieda', 'Gustav', 'Irma', 'Elias'];
     const rs = await Promise.all([...who, ...who].map(w => kauf(w)));
     const wins = rs.filter(r => r.advent && r.advent.gewonnen).length;
     const rows = (await db('advent_wins', 'day')).filter(x => x.day === isoDay(0)).length;

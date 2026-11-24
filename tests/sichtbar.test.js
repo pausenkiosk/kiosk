@@ -101,7 +101,7 @@ module.exports = async function sichtbar(browser) {
   await K('Ausgeblendet heißt nur „nicht angezeigt“: der direkte Aufruf bucht weiterhin (so gewollt)', async () => {
     const p = await pid('S-Leer');
     const r = await kp.evaluate(async id => (await SB.rpc('k_buy', { p_token: K.token, p_product: id, p_qty: 1 })).data, p.id);
-    eq(JSON.stringify(r), '{"ok":true}', 'k_buy auf Bestand 0');
+    eq(r && r.ok, true, 'k_buy auf Bestand 0');
     eq((await pid('S-Leer')).stock, 0, 'Bestand S-Leer bleibt 0');
     await kReload();
     await lnIs(kp, 'OFFEN', '2,00 €');

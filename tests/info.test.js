@@ -95,10 +95,10 @@ module.exports = async function info(browser) {
   });
   await S('Einkauf: Info-Knöpfe an Einkauf und Haltbarkeit', async () => { await tab('einkauf'); await check(page, ['einkauf', 'mhd']); });
   await S('Kasse: Info-Knöpfe an Einnahmen/Ausgaben (Kassensturz) und Letzte Buchungen (Storno)', async () => { await tab('kasse'); await check(page, ['kassensturz', 'storno']); });
-  await S('Leute: Info-Knöpfe an Schuldscheine, Rangliste, QR-Code', async () => { await tab('leute'); await check(page, ['schuldscheine', 'rangliste', 'qr']); });
+  await S('Leute: Info-Knöpfe an Schuldscheine, Rangliste, QR-Code', async () => { await tab('leute'); await check(page, ['schuldscheine', ...((await page.evaluate(() => 'ntfy' in INFO)) ? ['ntfy'] : []), 'rangliste', 'qr']); });
   await S('Jeder hinterlegte Info-Text wird irgendwo angeboten', async () => {
     const all = await page.evaluate(() => Object.keys(INFO));
-    const missing = all.filter(k => !seen.has(k));
+    const missing = all.filter(k => !seen.has(k) && !['k_express', 'express', 'advent'].includes(k));   // erscheinen nur bei offener Lieferung bzw. im Adventszeitraum (geprüft im Teil „extras“)
     expect(missing.length === 0, 'Ohne Knopf: ' + missing.join(', '));
     expect(all.length >= 19, 'Anzahl Info-Texte: ' + all.length);
   });

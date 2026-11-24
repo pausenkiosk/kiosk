@@ -84,7 +84,7 @@ module.exports = async function uebertrag(browser) {
   });
   await S('Rangliste zählt Überträge nicht als Umsatz', async () => {
     await tab('leute');
-    const rows = await page.locator('#app .paper').nth(1).locator('tr').evaluateAll(trs => trs.slice(1).map(tr => [...tr.children].map(td => td.textContent).join('|')));
+    const rows = await page.locator('#app .paper', { hasText: 'Rangliste Umsatz' }).locator('tr').evaluateAll(trs => trs.slice(1).map(tr => [...tr.children].map(td => td.textContent).join('|')));
     expect(rows.includes('Wanda|0,00|0,00') && rows.includes('Willi|0,00|0,00'), 'Rangliste: ' + rows.filter(r => /^W(anda|illi)/.test(r)).join(' ; '));
   });
   const kLogin = async (name, pin) => {

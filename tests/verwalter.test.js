@@ -873,7 +873,7 @@ module.exports = async function verwalter(browser) {
     expect(!(await person('Dora')), 'Dora steht noch in der Datenbank');
   });
   await S('Leute: Rangliste nach Umsatz der letzten 30 Tage', async () => {
-    const rows = await page.locator('#app .paper').nth(1).locator('tr').evaluateAll(trs => trs.slice(1).map(tr => [...tr.children].map(td => td.textContent).join('|')));
+    const rows = await page.locator('#app .paper', { hasText: 'Rangliste Umsatz' }).locator('tr').evaluateAll(trs => trs.slice(1).map(tr => [...tr.children].map(td => td.textContent).join('|')));
     eq(rows.slice(0, 4).join(' ; '), 'Emil|4,50|4,50 ; Anna|2,00|2,00 ; Ben|0,80|0,80 ; Gerd|0,00|3,00', 'Rangliste');
   });
   await S('Leute: QR-Code zeigt auf den Kiosk-Link', async () => {

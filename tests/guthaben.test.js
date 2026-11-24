@@ -182,7 +182,7 @@ module.exports = async function guthaben(browser) {
   });
   await S('Rangliste zählt nur Käufe, keine Einzahlungen', async () => {
     await tab('leute');
-    const rows = await page.locator('#app .paper').nth(1).locator('tr').evaluateAll(trs => trs.slice(1).map(tr => [...tr.children].map(td => td.textContent).join('|')));
+    const rows = await page.locator('#app .paper', { hasText: 'Rangliste Umsatz' }).locator('tr').evaluateAll(trs => trs.slice(1).map(tr => [...tr.children].map(td => td.textContent).join('|')));
     expect(rows.includes('Karl|21,30|21,30'), 'Rangliste Karl (Käufe 9,60 + 9,00 + 1,50 + 1,20): ' + rows.filter(r => r.startsWith('Karl')).join());
     expect(rows.includes('Lena|1,20|1,20'), 'Rangliste Lena: ' + rows.filter(r => r.startsWith('Lena')).join());
   });
