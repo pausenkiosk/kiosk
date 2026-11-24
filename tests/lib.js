@@ -98,6 +98,26 @@ async function fillModal(page, title, values, submit = true) {
   if (submit) await m.locator('button.pri').click();
 }
 
+/* Kollegen-Anmeldemaske in allen Fassungen: Namensliste, „Willkommen zurück“ (gemerkter Name) oder Suchfeld ab 13 Personen. */
+async function loggedOut(page) { await page.waitForFunction(() => /Wer bist du\?|Willkommen zurück/.test(document.querySelector('#app').textContent)); }
+async function pickName(page, name) {
+  await loggedOut(page);
+  const other = page.locator('#app [data-a="k-all"]');
+  if (await other.count()) await other.click();
+  const kq = page.locator('#kq');
+  if (await kq.count()) await kq.fill(name);
+  await page.locator('#app .namegrid button', { hasText: new RegExp('^' + name + '$') }).click();
+}
+
+/* Saldo einer Person aus der Verwalter-Liste in Cent (positiv = Schulden, negativ = Guthaben), egal in welcher Darstellung:
+   alt „4,50“ / „Guthaben 19,90“, neu rot „−4,50“ / grün „19,90“. */
+async function listSaldo(page, name) {
+  const cell = prow(page, name).locator('span').nth(1);
+  const [txt, cls] = [(await cell.innerText()).trim(), (await cell.getAttribute('class')) || ''];
+  const n = Math.round(Number(txt.replace(/Guthaben|[−-]/g, '').trim().replace(/\./g, '').replace(',', '.')) * 100);
+  return /Guthaben/.test(txt) || /\bpos\b/.test(cls) ? -n : n;
+}
+
 /* Wartet, bis irgendwo in der App ein Text steht. */
 async function see(page, text, sel = '#app') {
   try { await page.locator(sel, { hasText: text }).first().waitFor(); }
@@ -133,7 +153,8 @@ async function lnValue(page, label) {
 async function lnIs(page, label, expected) {
   try {
     await page.waitForFunction(([lb, ex]) => [...document.querySelectorAll('#app .ln')]
-      .some(e => e.children[0].textContent.includes(lb) && e.children[1].textContent.trim() === ex), [label, expected]);
+      .some(e => e.children[0].textContent.includes(lb) && (e.children[1].textContent.trim() === ex ||
+        (lb === 'OFFEN' && e.children[1].textContent.trim() === '−' + ex))), [label, expected]);   // ab v24 stehen Schulden beim Kollegen mit Minus
   } catch {
     let now; try { now = await lnValue(page, label); } catch { now = '(fehlt)'; }
     throw new Error(`„${label}“: erwartet „${expected}“, tatsächlich „${now}“`);
@@ -175,4 +196,4 @@ function summary() {
   return bad.length;
 }
 
-module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };
+module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, loggedOut, pickName, listSaldo, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };

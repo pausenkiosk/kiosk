@@ -2,7 +2,7 @@
 /* Verwalter-Bereich komplett: Anmeldung, Bon, Regal (inkl. Löschen), Fotos, Einkauf (von Hand, Ansage, Bon-Foto),
    Haltbarkeit, Kasse, Leute, Sicherung, Nachricht an Claude.
    Läuft nach dem Kollegen-Teil: Ben hat 1 Wasser angeschrieben (0,80 €), Clara ist gesperrt. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, row, prow, rowHas, lnIs, anonApi, sql, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, loggedOut, pickName, see, row, prow, rowHas, lnIs, anonApi, sql, isoDay } = require('./lib');
 
 const dshort = iso => { const [, m, d] = iso.split('-'); return `${d}.${m}.`; };
 
@@ -931,7 +931,7 @@ module.exports = async function verwalter(browser) {
   const kpage = await newPage(browser);
   await S('QR-Code: Vorbereitung – Kollegin Anna meldet sich mit dem alten Code an', async () => {
     await kpage.goto(`${CFG.url}?k=${CFG.code}`);
-    await kpage.locator('.namegrid button', { hasText: /^Anna$/ }).click();
+    await pickName(kpage, 'Anna');
     await kpage.fill('#pin', '1111');
     await kpage.locator('#kpin button.pri').click();
     await see(kpage, 'Schuldschein von Anna');
@@ -994,8 +994,8 @@ module.exports = async function verwalter(browser) {
     await see(kpage, 'Dieser QR-Code ist nicht mehr gültig');
     expect(newCode, 'kein neuer Code');
     await kpage.goto(`${CFG.url}?k=${newCode}`);
-    await see(kpage, 'Wer bist du?');
-    eq(await kpage.locator('.namegrid button', { hasText: /^Anna$/ }).count(), 1, 'Anna in der Namensliste');
+    await pickName(kpage, 'Anna');
+    await see(kpage, 'Hallo Anna');
   });
   await kpage.context().close();
   await S('QR-Code: Aushang druckt weiterhin nur den Aushang (mit neuem Code)', async () => {

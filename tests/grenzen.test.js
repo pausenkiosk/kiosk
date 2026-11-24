@@ -2,7 +2,7 @@
 /* Viele Buchungen: Stimmen Kassenstand und Schuldscheine auch noch bei mehr als 1000 Einträgen?
    (Die Datenbank-Schnittstelle liefert pro Abfrage standardmäßig höchstens 1000 Zeilen.)
    Läuft als letzter Teil, weil er viele Testbuchungen anlegt. */
-const { CFG, step, setGroup, expect, eq, newPage, lnValue, see, prow } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, lnValue, see, listSaldo, prow } = require('./lib');
 
 const toCents = s => (/Guthaben/.test(s) ? -1 : 1) * Math.round(Number(s.replace('Guthaben', '').trim().replace(/\./g, '').replace(',', '.').replace('−', '-')) * 100);
 /* Offene Schuldscheine minus Guthaben der Kollegen (die Guthaben-Zeile fehlt, wenn niemand Guthaben hat). */
@@ -54,8 +54,7 @@ module.exports = async function grenzen(browser) {
   await S('Schuldschein einer Person stimmt bei über 1000 Buchungen', async () => {
     expect(before, 'Vorbereitung fehlgeschlagen');
     await page.locator('#nav [data-t="leute"]').click();
-    const txt = (await prow(page, 'Gerd').locator('span').nth(1).innerText()).trim();
-    eq(toCents(txt), before.gerd + N, 'Schuldschein Gerd in Cent');
+    eq(await listSaldo(page, 'Gerd'), before.gerd + N, 'Schuldschein Gerd in Cent');
   });
   await S('Sicherung enthält alle Buchungen (auch über 1000), keine doppelt', async () => {
     await page.locator('#nav [data-t="bon"]').click();

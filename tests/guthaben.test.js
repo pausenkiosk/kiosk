@@ -1,7 +1,7 @@
 'use strict';
 /* Guthaben aufladen (Ausbaustufe 4). Zwei Browser: Verwalter und Kollege „Karl“, dazu „Lena“ für Gegenproben.
    Eigene Testprodukte (1,20 / 1,00 / 0,50) und eigene Personen, damit der Teil für sich allein rechnet. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, prow, rowHas, lnIs, lnValue, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, listSaldo, pickName, see, prow, rowHas, lnIs, lnValue, anonApi } = require('./lib');
 
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -68,7 +68,7 @@ module.exports = async function guthaben(browser) {
   await K('Kollege ohne Schulden: „OFFEN 0,00“ und Hinweis aufs Aufladen', async () => {
     expect(code, 'Vorbereitung fehlgeschlagen');
     await kp.goto(`${CFG.url}?k=${code}`);
-    await kp.locator('.namegrid button', { hasText: /^Karl$/ }).click();
+    await pickName(kp, 'Karl');
     await kp.fill('#pin', '6161');
     await kp.locator('#kpin button.pri').click();
     await kp.locator('[data-a="k-consent"]').click();
@@ -82,9 +82,8 @@ module.exports = async function guthaben(browser) {
     eq(hint, 'Gebucht. Karl hat jetzt 20,00 € Guthaben.', 'Hinweis');
     eq(await saldo('Karl'), -2000, 'Saldo Karl in Cent');
   });
-  await S('Verwalter-Liste zeigt „Guthaben 20,00“ statt eines negativen Betrags', async () => {
-    const txt = (await prow(page, 'Karl').locator('span').nth(1).innerText()).trim();
-    eq(txt, 'Guthaben 20,00', 'Anzeige bei Karl');
+  await S('Verwalter-Liste zeigt das Guthaben von 20,00 als Guthaben, nicht als „-20,00“', async () => {
+    eq(await listSaldo(page, 'Karl'), -2000, 'Anzeige bei Karl (Cent, negativ = Guthaben)');
     expect(!(await page.locator('#app .paper').first().innerText()).includes('-20,00'), 'Negativer Betrag in der Liste');
   });
   await S('Kassenbuch: Einzahlung ist eine Einnahme (20,00, Art „zahlung“)', async () => {
@@ -139,7 +138,7 @@ module.exports = async function guthaben(browser) {
     const [intro, hint] = await einzahlung('Karl', '20');
     eq(intro, 'Offen: 0,10 €. Alles darüber wird Guthaben.', 'Text im Dialog');
     eq(hint, 'Gebucht. Karl hat jetzt 19,90 € Guthaben.', 'Hinweis');
-    eq((await prow(page, 'Karl').locator('span').nth(1).innerText()).trim(), 'Guthaben 19,90', 'Anzeige bei Karl');
+    eq(await listSaldo(page, 'Karl'), -1990, 'Anzeige bei Karl (Cent, negativ = Guthaben)');
     await kp.reload();
     await lnIs(kp, 'DEIN GUTHABEN', '19,90 €');
   });
@@ -163,14 +162,14 @@ module.exports = async function guthaben(browser) {
     eq(hint, 'Gebucht. Noch offen: 0,20 €.', 'Hinweis');
     [intro, hint] = await einzahlung('Lena', '0,20');
     eq(hint, 'Gebucht. Schuldschein ist ausgeglichen.', 'Hinweis');
-    eq((await prow(page, 'Lena').locator('span').nth(1).innerText()).trim(), '0,00', 'Anzeige bei Lena');
+    eq(await listSaldo(page, 'Lena'), 0, 'Anzeige bei Lena');
   });
   await S('Einzahlungs-Dialog und Hinweis stimmen auch, wenn der Kollege seit dem Laden der Verwaltung angeschrieben hat', async () => {
     await adminReload();                 // Verwalter hat die Seite offen (Karl: Guthaben 20,00) …
     await kauf('G-Limo', 1);             // … inzwischen schreibt Karl 1,20 an (Guthaben 18,80)
     const [intro, hint] = await einzahlung('Karl', '1,20', false);
     await adminReload(); await tab('leute');
-    eq((await prow(page, 'Karl').locator('span').nth(1).innerText()).trim(), 'Guthaben 20,00', 'Anzeige bei Karl nach dem Neuladen');
+    eq(await listSaldo(page, 'Karl'), -2000, 'Anzeige bei Karl nach dem Neuladen (Cent)');
     eq(intro, 'Vorhandenes Guthaben: 18,80 €. Der Betrag kommt dazu.', 'Text im Dialog');
     eq(hint, 'Gebucht. Karl hat jetzt 20,00 € Guthaben.', 'Hinweis');
   });
@@ -178,7 +177,7 @@ module.exports = async function guthaben(browser) {
     await tab('kasse'); await hideToast(page);
     await page.locator('#app [data-a="a-cash"]').click();
     await fillModal(page, 'Kassensturz', { c: '50,00' });
-    await toast(page, /^Gebucht: 7,50 € Barverkäufe, 42,50 € waren Einzahlungen\.$/);
+    await toast(page, /^Gebucht: 7,50 € Barverkäufe, 42,50 € stammen aus Einzahlungen\.$/);
     await idle(page);
   });
   await S('Rangliste zählt nur Käufe, keine Einzahlungen', async () => {
