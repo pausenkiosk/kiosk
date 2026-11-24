@@ -40,6 +40,7 @@ const data = {
     if (u.pathname.includes('/rpc/a_cash_box')) return r.fulfill({ json: { paid: 500, bar: 1320 } });
     if (u.pathname.includes('/rpc/a_storno')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_payout')) return r.fulfill({ json: 'ok' });
+    if (u.pathname.includes('/rpc/a_fix')) return r.fulfill({ json: null });
     if (u.pathname.includes('/storage/v1/object/list')) return r.fulfill({ json: [] });
     if (u.pathname.includes('/auth/')) return r.fulfill({ json: {} });
     const pid = (u.searchParams.get('person_id') || '').replace(/^eq\./, '');
@@ -80,6 +81,10 @@ const data = {
   await step('Leute: Guthaben-Anzeige', async () => { await has('Guthaben 18,50', 'Einzahlung'); });
   await step('Leute: Auszahlung', async () => { await p.click('[data-a="a-payout"]'); await p.waitForSelector('text=Auszahlung an Beispiel'); if (await p.inputValue('#f_c') !== '18,50') throw new Error('Vorschlag ' + await p.inputValue('#f_c')); await p.click('#mform button.pri'); await closed(); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('Ausgezahlt: 18,50'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('a_payout'))) throw new Error('nicht gebucht'); });
   await step('Info-Knopf', async () => { const n = (await p.$$('[data-a="info"]')).length; if (n < 3) throw new Error('nur ' + n); await p.click('[data-a="info"] >> nth=0'); await p.waitForSelector('#modal:not([hidden]) >> text=Offener Betrag'); await p.click('[data-a="m-close"]'); await closed(); });
+  await step('Leute: Guthaben übertragen', async () => { await p.click('[data-a="a-more"] >> nth=0'); await p.selectOption('#f_a', 'guthaben'); await p.fill('#f_x', '-12,00'); await p.click('#mform button.pri'); await closed();
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('12,00 € Guthaben'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('a_fix') && c.includes('-1200'))) throw new Error('falsches Vorzeichen'); });
+  await step('Leute: Schulden übertragen', async () => { await p.click('[data-a="a-more"] >> nth=0'); await p.selectOption('#f_a', 'schuld'); await p.fill('#f_x', '7,50'); await p.click('#mform button.pri'); await closed();
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('7,50 € Schulden'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('a_fix') && c.includes('"p_cents":750'))) throw new Error('falsches Vorzeichen'); });
   await step('Leute: Zahlung', async () => { await p.click('[data-a="a-pay"] >> nth=0'); await p.fill('#f_c', '2,50'); await p.click('#mform button.pri'); await closed(); });
   await p.screenshot({ path: out + '/a-leute.png', fullPage: true });
   console.log('Schreibzugriffe:'); calls.forEach(c => console.log('  ', c));

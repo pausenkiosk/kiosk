@@ -144,7 +144,7 @@ function kRender() {
       <p class="small mut">${s.saldo < 0 ? 'Einkäufe werden von deinem Guthaben abgezogen. Ist es aufgebraucht, schreibst du wie gewohnt an.' : 'Bezahlen oder Guthaben aufladen: Betrag dem Betreiber geben, er trägt ihn ein.'}</p></div>
     <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen ${ii('k_entries')}</h2>${s.entries.length ? s.entries.map(e =>
-      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
+      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? (e.cents > 0 ? 'Übertrag Schulden' : 'Übertrag Guthaben') : 'Kauf'}</span>` +
       `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents < 0 && e.kind !== 'zahlung' ? '−' : ''}${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
     <div class="paper"><h2>Wunsch ${ii('k_wish')}</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
@@ -598,11 +598,18 @@ const aActs = {
   },
   'a-more': async el => {
     const p = A.d.persons.find(x => x.id === el.dataset.id);
-    const v = await ask(p.vorname, [{ k: 'a', label: 'Aktion', type: 'select', options: [['pin', 'Neue PIN setzen (hebt Sperre auf)'], ['fix', 'Schuldschein korrigieren (+ / −)'], ['del', 'Person löschen (nur bei 0,00 €)']] },
-      { k: 'x', label: 'Neue PIN bzw. Korrekturbetrag €', mode: 'decimal' }], 'Ausführen');
+    const v = await ask(p.vorname, [{ k: 'a', label: 'Aktion', type: 'select', options: [
+        ['schuld', 'Schulden übertragen (z. B. vom Papier-Schuldschein)'], ['guthaben', 'Guthaben übertragen (schon früher bezahlt)'],
+        ['pin', 'Neue PIN setzen (hebt Sperre auf)'], ['del', 'Person löschen (nur bei 0,00 €)']] },
+      { k: 'x', label: 'Betrag in € (ohne Vorzeichen) bzw. neue PIN', mode: 'decimal' }], 'Ausführen',
+      '<p class="small mut">Übertragen ändert nur den Schuldschein, nicht die Kasse. Gibt dir jemand jetzt Geld, nimm stattdessen „Einzahlung“.</p>');
     if (!v) return;
     if (v.a === 'pin') { if (!/^\d{4}$/.test(v.x)) return toast('Die PIN braucht genau 4 Ziffern.'); await rpc('a_pin', { p_person: p.id, p_pin: v.x }); toast('Neue PIN gesetzt.'); }
-    else if (v.a === 'fix') { const c = cents(v.x); if (!c) return toast('Bitte einen Betrag eintragen, z. B. −1,50.'); await rpc('a_fix', { p_person: p.id, p_cents: c }); }
+    else if (v.a === 'schuld' || v.a === 'guthaben') {
+      const c = Math.abs(cents(v.x) || 0); if (!c) return toast('Bitte einen Betrag eintragen, z. B. 7,50.');
+      await rpc('a_fix', { p_person: p.id, p_cents: v.a === 'schuld' ? c : -c });
+      toast(v.a === 'schuld' ? `${eur(c)} € Schulden für ${p.vorname} eingetragen.` : `${eur(c)} € Guthaben für ${p.vorname} eingetragen.`);
+    }
     else toast(await rpc('a_person_delete', { p_person: p.id }) ? 'Person gelöscht.' : 'Nicht gelöscht: Der Schuldschein ist nicht ausgeglichen.');
     await reload();
   },
