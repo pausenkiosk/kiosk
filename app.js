@@ -766,7 +766,7 @@ const aActs = {
     const data = { erstellt: new Date().toISOString() };
     for (const tb of ['products', 'sales', 'ledger', 'journal', 'purchases', 'purchase_items', 'counts', 'cash_counts', 'alerts', 'requests', 'wishes', 'wish_votes', 'photo_jobs']) data[tb] = await all(tb);
     data.persons = await all('persons', 'id,vorname,consent_at,active,created_at');
-    data.settings = (await all('settings')).filter(x => x.key !== 'kiosk_code' && x.key !== 'setup_code');
+    data.settings = (await all('settings')).filter(x => !['kiosk_code', 'setup_code', 'ntfy_topic'].includes(x.key));
     const name = `kiosk-sicherung-${iso(new Date())}.json`;
     const file = new File([JSON.stringify(data, null, 1)], name, { type: 'application/json' });
     let saved = false;

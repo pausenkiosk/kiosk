@@ -813,6 +813,8 @@ language plpgsql security definer set search_path = public as $$
 declare pid uuid := k_person(p_token); it jsonb; c int; total int := 0; lst jsonb := '[]'::jsonb; did uuid; o text := trim(coalesce(p_office, '')); lids uuid[]; sids uuid[];
 begin
   if pid is null then return jsonb_build_object('ok', false, 'err', 'sitzung'); end if;
+  -- gleichzeitige Bestellungen derselben Person nacheinander abarbeiten
+  perform pg_advisory_xact_lock(hashtext('deliver:' || pid::text));
   perform k_cleanup();
   if not exists (select 1 from persons where id = pid and consent_at is not null) then return jsonb_build_object('ok', false, 'err', 'einwilligung'); end if;
   if length(o) < 1 or length(o) > 40 then return jsonb_build_object('ok', false, 'err', 'buero'); end if;
