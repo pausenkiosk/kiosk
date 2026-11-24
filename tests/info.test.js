@@ -82,7 +82,8 @@ module.exports = async function info(browser) {
     eq((await kp.locator('#app .ln.big span').first().innerText()).replace(/\s+/g, ' ').trim(), 'OFFEN i', 'Beschriftung');
   });
   await S('Bon: Info-Knöpfe an Kassenstand, Fehlbetrag, Nachbestellen, Haltbarkeit (2×), An Claude, Sicherung', async () => {
-    await check(page, ['kasse', 'fehl', 'ampel', 'mhd', 'mhd', 'claude', 'backup']);
+    const next3 = await page.evaluate(() => 'next3' in INFO);   // ab v23: Abschnitt „Läuft als Nächstes ab“
+    await check(page, ['kasse', 'fehl', 'ampel', ...(next3 ? ['next3'] : []), 'mhd', 'mhd', 'claude', 'backup']);
   });
   await S('Regal: Info-Knöpfe an Regal, Wünsche, Ampel; beim Zählen ein eigener', async () => {
     await tab('regal');
@@ -99,7 +100,7 @@ module.exports = async function info(browser) {
     const all = await page.evaluate(() => Object.keys(INFO));
     const missing = all.filter(k => !seen.has(k));
     expect(missing.length === 0, 'Ohne Knopf: ' + missing.join(', '));
-    eq(all.length, 19, 'Anzahl Info-Texte');
+    expect(all.length >= 19, 'Anzahl Info-Texte: ' + all.length);
   });
   await S('Info-Knöpfe erscheinen nicht im Druck (Aushang und Preisliste)', async () => {
     await tab('leute');

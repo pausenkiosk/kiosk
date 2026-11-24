@@ -1,6 +1,6 @@
 'use strict';
 /* Guthaben auszahlen und Kassensturz mit Auszahlungen (Ausbaustufe 5). Eigene Personen, damit der Teil für sich allein rechnet. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, prow, row, rowHas, lnIs, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, listSaldo, pickName, see, prow, row, rowHas, lnIs, anonApi } = require('./lib');
 
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -21,7 +21,7 @@ module.exports = async function auszahlung(browser) {
   const ids = {};
   const saldo = async n => (await db('ledger', 'amount_cents', 'person_id', ids[n])).reduce((a, l) => a + l.amount_cents, 0);
   const stand = async () => (await db('journal', 'in_cents,out_cents')).reduce((a, x) => a + x.in_cents - x.out_cents, 0);
-  const anzeige = async n => (await prow(page, n).locator('span').nth(1).innerText()).trim();
+  const anzeige = n => listSaldo(page, n);   // Cent, negativ = Guthaben
   const hatKnopf = async n => (await prow(page, n).locator('[data-a="a-payout"]').count()) === 1;
   /* Auszahlungs-Dialog öffnen; liefert [Text im Dialog, vorgeschlagener Betrag] */
   const dialog = async name => {
@@ -93,7 +93,7 @@ module.exports = async function auszahlung(browser) {
     const before = await stand(), n = (await db('journal', 'id')).length;
     await dialog('Paul');
     eq(await buchen('5,00'), 'Ausgezahlt: 5,00 €.', 'Hinweis');
-    eq(await anzeige('Paul'), 'Guthaben 15,00', 'Anzeige bei Paul');
+    eq(await anzeige('Paul'), -1500, 'Anzeige bei Paul (Cent, negativ = Guthaben)');
     const l = (await db('ledger', 'amount_cents,kind,day', 'person_id', ids.Paul)).filter(x => x.kind === 'auszahlung');
     eq(JSON.stringify(l.map(x => x.amount_cents)), '[500]', 'Schuldschein-Buchung „auszahlung“');
     const j = await db('journal', 'text,in_cents,out_cents,kind', 'kind', 'auszahlung');
@@ -128,7 +128,7 @@ module.exports = async function auszahlung(browser) {
     const [, vorschlag] = await dialog('Uwe');
     eq(vorschlag, '7,30', 'vorgeschlagener Betrag');
     eq(await buchen(null), 'Ausgezahlt: 7,30 €.', 'Hinweis');
-    eq(await anzeige('Uwe'), '0,00', 'Anzeige bei Uwe'); eq(await hatKnopf('Uwe'), false, 'Knopf bei Uwe'); eq(await saldo('Uwe'), 0, 'Saldo Uwe');
+    eq(await anzeige('Uwe'), 0, 'Anzeige bei Uwe'); eq(await hatKnopf('Uwe'), false, 'Knopf bei Uwe'); eq(await saldo('Uwe'), 0, 'Saldo Uwe');
   });
   await K('Kollege sieht „Auszahlung 5,00“ in seinen Buchungen (ohne Rückgängig) und sein restliches Guthaben', async () => {
     await kp.goto(`${CFG.url}?k=${code}`);

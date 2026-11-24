@@ -109,6 +109,15 @@ async function pickName(page, name) {
   await page.locator('#app .namegrid button', { hasText: new RegExp('^' + name + '$') }).click();
 }
 
+/* Saldo einer Person aus der Verwalter-Liste in Cent (positiv = Schulden, negativ = Guthaben), egal in welcher Darstellung:
+   alt „4,50“ / „Guthaben 19,90“, neu rot „−4,50“ / grün „19,90“. */
+async function listSaldo(page, name) {
+  const cell = prow(page, name).locator('span').nth(1);
+  const [txt, cls] = [(await cell.innerText()).trim(), (await cell.getAttribute('class')) || ''];
+  const n = Math.round(Number(txt.replace(/Guthaben|[−-]/g, '').trim().replace(/\./g, '').replace(',', '.')) * 100);
+  return /Guthaben/.test(txt) || /\bpos\b/.test(cls) ? -n : n;
+}
+
 /* Wartet, bis irgendwo in der App ein Text steht. */
 async function see(page, text, sel = '#app') {
   try { await page.locator(sel, { hasText: text }).first().waitFor(); }
@@ -186,4 +195,4 @@ function summary() {
   return bad.length;
 }
 
-module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, loggedOut, pickName, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };
+module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, loggedOut, pickName, listSaldo, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };

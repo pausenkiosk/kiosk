@@ -1,6 +1,6 @@
 'use strict';
 /* Übertrag vom Papier-Schuldschein (ab app.js v21): „Schulden übertragen“ / „Guthaben übertragen“ unter Leute → „…“. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, prow, lnIs } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, listSaldo, see, prow, lnIs } = require('./lib');
 
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -19,7 +19,7 @@ module.exports = async function uebertrag(browser) {
   const ledger = async n => (await db('ledger', 'amount_cents,kind', 'person_id', ids[n])).map(l => `${l.kind}:${l.amount_cents}`).sort().join(',');
   const saldo = async n => (await db('ledger', 'amount_cents', 'person_id', ids[n])).reduce((a, l) => a + l.amount_cents, 0);
   const stand = async () => (await db('journal', 'in_cents,out_cents')).reduce((a, x) => a + x.in_cents - x.out_cents, 0);
-  const anzeige = async n => (await prow(page, n).locator('span').nth(1).innerText()).trim();
+  const anzeige = n => listSaldo(page, n);   // Cent, negativ = Guthaben
   /* Dialog „…“ ausfüllen; liefert den Hinweis danach */
   const mehr = async (name, aktion, betrag) => {
     await idle(page); await hideToast(page);
@@ -54,13 +54,13 @@ module.exports = async function uebertrag(browser) {
   await S('Schulden übertragen 7,50: positiver Betrag im Schuldschein, kein Kassenbuch-Eintrag', async () => {
     eq(await mehr('Wanda', 'schuld', '7,50'), '7,50 € Schulden für Wanda eingetragen.', 'Hinweis');
     eq(await ledger('Wanda'), 'korrektur:750', 'Schuldschein Wanda');
-    eq(await anzeige('Wanda'), '7,50', 'Anzeige bei Wanda');
+    eq(await anzeige('Wanda'), 750, 'Anzeige bei Wanda (Cent)');
     eq((await db('journal', 'id')).length, n0, 'Anzahl Kassenbuch-Zeilen'); eq(await stand(), stand0, 'Kassenstand');
   });
-  await S('Guthaben übertragen 12,00: negativer Betrag im Schuldschein, Anzeige „Guthaben 12,00“, kein Kassenbuch-Eintrag', async () => {
+  await S('Guthaben übertragen 12,00: negativer Betrag im Schuldschein, Anzeige als Guthaben, kein Kassenbuch-Eintrag', async () => {
     eq(await mehr('Willi', 'guthaben', '12'), '12,00 € Guthaben für Willi eingetragen.', 'Hinweis');
     eq(await ledger('Willi'), 'korrektur:-1200', 'Schuldschein Willi');
-    eq(await anzeige('Willi'), 'Guthaben 12,00', 'Anzeige bei Willi');
+    eq(await anzeige('Willi'), -1200, 'Anzeige bei Willi (Cent, negativ = Guthaben)');
     eq((await db('journal', 'id')).length, n0, 'Anzahl Kassenbuch-Zeilen'); eq(await stand(), stand0, 'Kassenstand');
   });
   await S('Ein eingetipptes Minus wird ignoriert (normales und typografisches)', async () => {
