@@ -613,7 +613,7 @@ const aActs = {
     if (v.a === 'pin') { if (!/^\d{4}$/.test(v.x)) return toast('Die PIN braucht genau 4 Ziffern.'); await rpc('a_pin', { p_person: p.id, p_pin: v.x }); toast('Neue PIN gesetzt.'); }
     else if (v.a === 'schuld' || v.a === 'guthaben') {
       const c = Math.abs(cents(v.x) || 0); if (!c) return toast('Bitte einen Betrag eintragen, z. B. 7,50.');
-      if (c >= 10000 && !(await ask(`${eur(c)} € ${v.a === 'schuld' ? 'Schulden' : 'Guthaben'} für ${p.vorname}?`, [], 'Ja, eintragen', '<p>Das ist ein ungewöhnlich hoher Betrag. Bitte prüfen, ob du dich nicht vertippt hast.</p>'))) return;
+      if (c >= 2000 && !(await ask(`${eur(c)} € ${v.a === 'schuld' ? 'Schulden' : 'Guthaben'} für ${p.vorname}?`, [], 'Ja, eintragen', '<p>Das ist ein ungewöhnlich hoher Betrag. Bitte prüfen, ob du dich nicht vertippt hast.</p>'))) return;
       await rpc('a_fix', { p_person: p.id, p_cents: v.a === 'schuld' ? c : -c });
       toast(v.a === 'schuld' ? `${eur(c)} € Schulden für ${p.vorname} eingetragen.` : `${eur(c)} € Guthaben für ${p.vorname} eingetragen.`);
     }
