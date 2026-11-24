@@ -87,6 +87,10 @@ const data = {
     await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('12,00 € Guthaben'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('a_fix') && c.includes('-1200'))) throw new Error('falsches Vorzeichen'); });
   await step('Leute: Schulden übertragen', async () => { await p.click('[data-a="a-more"] >> nth=0'); await p.selectOption('#f_a', 'schuld'); await p.fill('#f_x', '7,50'); await p.click('#mform button.pri'); await closed();
     await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('7,50 € Schulden'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('a_fix') && c.includes('"p_cents":750'))) throw new Error('falsches Vorzeichen'); });
+  await step('Leute: ohne Auswahl nichts gebucht', async () => { const n = calls.length; await p.click('[data-a="a-more"] >> nth=0'); await p.fill('#f_x', '4711'); await p.click('#mform button.pri'); await closed();
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('zuerst eine Aktion'), null, { timeout: 5000 }); if (calls.slice(n).some(c => c.includes('a_fix'))) throw new Error('gebucht'); });
+  await step('Leute: hoher Betrag fragt nach', async () => { const n = calls.length; await p.click('[data-a="a-more"] >> nth=0'); await p.selectOption('#f_a', 'schuld'); await p.fill('#f_x', '4711'); await p.click('#mform button.pri');
+    await p.waitForSelector('text=ungewöhnlich hoher Betrag'); await p.click('[data-a="m-x"]'); await closed(); if (calls.slice(n).some(c => c.includes('a_fix'))) throw new Error('trotz Abbruch gebucht'); });
   await step('Leute: Zahlung', async () => { await p.click('[data-a="a-pay"] >> nth=0'); await p.fill('#f_c', '2,50'); await p.click('#mform button.pri'); await closed(); });
   await p.screenshot({ path: out + '/a-leute.png', fullPage: true });
   console.log('Schreibzugriffe:'); calls.forEach(c => console.log('  ', c));

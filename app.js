@@ -145,12 +145,12 @@ function kRender() {
     <div class="paper"><h2>Bestand und Anschreiben ${ii('k_buy')}</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Gerade ist nichts im Regal eingetragen.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen ${ii('k_entries')}</h2>${s.entries.length ? s.entries.map(e =>
       `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'auszahlung' ? 'Auszahlung' : e.kind === 'korrektur' ? (e.cents > 0 ? 'Übertrag Schulden' : 'Übertrag Guthaben') : 'Kauf'}</span>` +
-      `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents < 0 && e.kind !== 'zahlung' ? '−' : ''}${eur(Math.abs(e.cents))}</span></div>`).join('')
+      `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span class="${e.cents < 0 ? 'pos' : ''}">${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
     <div class="paper"><h2>Wunsch ${ii('k_wish')}</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
       <div class="row"><button class="btn" data-a="k-wish">Wunsch abgeben</button></div></div>
     <div class="paper"><div class="row"><button class="btn" data-a="k-pin">PIN ändern</button><button class="btn" data-a="k-logout">Abmelden</button></div>
-      <p class="small mut">Dein Handy merkt sich deinen Namen für die nächste Anmeldung. <button class="linkbtn" data-a="k-forget">Vergessen</button></p>
+      <p class="small mut">${favGet() ? 'Dein Handy merkt sich deinen Namen für die nächste Anmeldung. <button class="linkbtn" data-a="k-forget">Vergessen</button>' : 'Dein Handy merkt sich deinen Namen nicht. Bei der nächsten Anmeldung wird er wieder gemerkt.'}</p>
       <details class="small"><summary>Als App auf den Startbildschirm</summary>
 <p><b>iPhone:</b> Diese Seite in Safari öffnen, unten auf Teilen tippen (Quadrat mit Pfeil nach oben), „Zum Home-Bildschirm“ wählen und bestätigen. Beim ersten Öffnen des neuen Symbols einmal neu anmelden.</p>
 <p><b>Android:</b> Diese Seite in Chrome öffnen, oben rechts auf die drei Punkte tippen, „Zum Startbildschirm hinzufügen“ oder „App installieren“ wählen und bestätigen.</p>
@@ -440,7 +440,7 @@ function vLeute() {
       <div class="printonly"><p class="ctr"><span class="logo">KIOSK</span></p><p class="ctr">Anschreiben mit dem Handy</p></div>
       <div class="qr">${qr}</div>
       <div class="printonly"><p>1. Code mit der Kamera scannen</p><p>2. Vornamen antippen, PIN eingeben</p><p>3. Produkt antippen und anschreiben</p><p>Bar bezahlen geht weiterhin. Mitmachen ist freiwillig.</p></div>
-      <p class="small brk noprint">${esc(url)}</p><details class="small noprint"><summary>Als App auf den Startbildschirm</summary> <p><b>iPhone:</b> Diese Seite in Safari öffnen, unten auf Teilen tippen (Quadrat mit Pfeil nach oben), „Zum Home-Bildschirm“ wählen und bestätigen. Beim ersten Öffnen des neuen Symbols einmal neu anmelden.</p> <p><b>Android:</b> Diese Seite in Chrome öffnen, oben rechts auf die drei Punkte tippen, „Zum Startbildschirm hinzufügen“ oder „App installieren“ wählen und bestätigen.</p> <p class="mut">Das Symbol öffnet den Kiosk wie eine App. Installiert wird nichts.</p></details><div class="row noprint"><button class="btn pri" data-a="a-print">Aushang drucken</button><button class="btn" data-a="a-newcode">Neuen QR-Code erzeugen</button><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
+      <p class="small brk noprint">${esc(url)}</p><details class="small noprint"><summary>Als App auf den Startbildschirm</summary> <p><b>iPhone:</b> Den Kiosk-Link oben in Safari öffnen (oder den QR-Code mit der Kamera scannen), unten auf Teilen tippen (Quadrat mit Pfeil nach oben), „Zum Home-Bildschirm“ wählen und bestätigen. Beim ersten Öffnen des neuen Symbols einmal neu anmelden.</p> <p><b>Android:</b> Den Kiosk-Link in Chrome öffnen, oben rechts auf die drei Punkte tippen, „Zum Startbildschirm hinzufügen“ oder „App installieren“ wählen und bestätigen.</p> <p class="mut">Das Symbol öffnet den Kiosk wie eine App. Installiert wird nichts.</p></details><div class="row noprint"><button class="btn pri" data-a="a-print">Aushang drucken</button><button class="btn" data-a="a-newcode">Neuen QR-Code erzeugen</button><button class="btn" data-a="a-copy" data-u="${esc(url)}">Link kopieren</button><button class="btn" data-a="a-out">Abmelden</button></div></div>`;
 }
 
 const reload = async () => { await aLoad(); aRender(); };
@@ -603,15 +603,17 @@ const aActs = {
   },
   'a-more': async el => {
     const p = A.d.persons.find(x => x.id === el.dataset.id);
-    const v = await ask(p.vorname, [{ k: 'a', label: 'Aktion', type: 'select', options: [
+    const v = await ask(p.vorname, [{ k: 'a', label: 'Aktion', type: 'select', options: [['', 'Bitte wählen …'],
         ['schuld', 'Schulden übertragen (z. B. vom Papier-Schuldschein)'], ['guthaben', 'Guthaben übertragen (schon früher bezahlt)'],
         ['pin', 'Neue PIN setzen (hebt Sperre auf)'], ['del', 'Person löschen (nur bei 0,00 €)']] },
       { k: 'x', label: 'Betrag in € (ohne Vorzeichen) bzw. neue PIN', mode: 'decimal' }], 'Ausführen',
       '<p class="small mut">Übertragen ändert nur den Schuldschein, nicht die Kasse. Gibt dir jemand jetzt Geld, nimm stattdessen „Einzahlung“.</p>');
     if (!v) return;
+    if (!v.a) return toast('Bitte zuerst eine Aktion wählen.');
     if (v.a === 'pin') { if (!/^\d{4}$/.test(v.x)) return toast('Die PIN braucht genau 4 Ziffern.'); await rpc('a_pin', { p_person: p.id, p_pin: v.x }); toast('Neue PIN gesetzt.'); }
     else if (v.a === 'schuld' || v.a === 'guthaben') {
       const c = Math.abs(cents(v.x) || 0); if (!c) return toast('Bitte einen Betrag eintragen, z. B. 7,50.');
+      if (c >= 10000 && !(await ask(`${eur(c)} € ${v.a === 'schuld' ? 'Schulden' : 'Guthaben'} für ${p.vorname}?`, [], 'Ja, eintragen', '<p>Das ist ein ungewöhnlich hoher Betrag. Bitte prüfen, ob du dich nicht vertippt hast.</p>'))) return;
       await rpc('a_fix', { p_person: p.id, p_cents: v.a === 'schuld' ? c : -c });
       toast(v.a === 'schuld' ? `${eur(c)} € Schulden für ${p.vorname} eingetragen.` : `${eur(c)} € Guthaben für ${p.vorname} eingetragen.`);
     }
