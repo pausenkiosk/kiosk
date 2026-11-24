@@ -98,6 +98,17 @@ async function fillModal(page, title, values, submit = true) {
   if (submit) await m.locator('button.pri').click();
 }
 
+/* Kollegen-Anmeldemaske in allen Fassungen: Namensliste, „Willkommen zurück“ (gemerkter Name) oder Suchfeld ab 13 Personen. */
+async function loggedOut(page) { await page.waitForFunction(() => /Wer bist du\?|Willkommen zurück/.test(document.querySelector('#app').textContent)); }
+async function pickName(page, name) {
+  await loggedOut(page);
+  const other = page.locator('#app [data-a="k-all"]');
+  if (await other.count()) await other.click();
+  const kq = page.locator('#kq');
+  if (await kq.count()) await kq.fill(name);
+  await page.locator('#app .namegrid button', { hasText: new RegExp('^' + name + '$') }).click();
+}
+
 /* Wartet, bis irgendwo in der App ein Text steht. */
 async function see(page, text, sel = '#app') {
   try { await page.locator(sel, { hasText: text }).first().waitFor(); }
@@ -175,4 +186,4 @@ function summary() {
   return bad.length;
 }
 
-module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };
+module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, loggedOut, pickName, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };

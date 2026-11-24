@@ -1,7 +1,7 @@
 'use strict';
 /* Guthaben aufladen (Ausbaustufe 4). Zwei Browser: Verwalter und Kollege „Karl“, dazu „Lena“ für Gegenproben.
    Eigene Testprodukte (1,20 / 1,00 / 0,50) und eigene Personen, damit der Teil für sich allein rechnet. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, prow, rowHas, lnIs, lnValue, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, prow, rowHas, lnIs, lnValue, anonApi } = require('./lib');
 
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -68,7 +68,7 @@ module.exports = async function guthaben(browser) {
   await K('Kollege ohne Schulden: „OFFEN 0,00“ und Hinweis aufs Aufladen', async () => {
     expect(code, 'Vorbereitung fehlgeschlagen');
     await kp.goto(`${CFG.url}?k=${code}`);
-    await kp.locator('.namegrid button', { hasText: /^Karl$/ }).click();
+    await pickName(kp, 'Karl');
     await kp.fill('#pin', '6161');
     await kp.locator('#kpin button.pri').click();
     await kp.locator('[data-a="k-consent"]').click();

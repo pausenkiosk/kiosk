@@ -1,11 +1,11 @@
 'use strict';
 /* Kollegen-Ansicht: QR-Link, Anmeldung mit PIN, Sperre, Einwilligung, Anschreiben, Rückgängig, PIN ändern. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, fillModal, see, rowHas, rowText, lnIs } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, fillModal, loggedOut, pickName, see, rowHas, rowText, lnIs } = require('./lib');
 
 const KURL = () => `${CFG.url}?k=${encodeURIComponent(CFG.code)}`;
 
 async function pick(page, name) {
-  await page.locator('.namegrid button', { hasText: name }).click();
+  await pickName(page, name);
   await see(page, 'Hallo ' + name);
 }
 async function pin(page, value) {
@@ -61,7 +61,7 @@ module.exports = async function kollege(browser) {
   });
   await step_('Einwilligung „Lieber nicht“ meldet ab', async () => {
     await page.locator('[data-a="k-logout"]').click();
-    await see(page, 'Wer bist du?');
+    await loggedOut(page);
     expect(await page.evaluate(() => localStorage.getItem('ktoken')) === null, 'Sitzung nach „Lieber nicht“ noch gespeichert');
   });
   await step_('Einwilligung „Einverstanden“ öffnet den Schuldschein', async () => {
@@ -140,7 +140,7 @@ module.exports = async function kollege(browser) {
   });
   await step_('Abmelden, alte PIN gilt nicht mehr, neue PIN gilt', async () => {
     await page.locator('[data-a="k-logout"]').click();
-    await see(page, 'Wer bist du?');
+    await loggedOut(page);
     await pick(page, 'Ben');
     await pin(page, '2222');
     await toast(page, /Falsche PIN\. Noch 2 Versuche\./);
@@ -148,7 +148,7 @@ module.exports = async function kollege(browser) {
     await see(page, 'Schuldschein von Ben');
     await lnIs(page, 'OFFEN', '0,80 €');
     await page.locator('[data-a="k-logout"]').click();
-    await see(page, 'Wer bist du?');
+    await loggedOut(page);
   });
   await step_('Sperre: nach 3 falschen PINs ist die Anmeldung gesperrt', async () => {
     await pick(page, 'Clara');

@@ -1,6 +1,6 @@
 'use strict';
 /* Guthaben auszahlen und Kassensturz mit Auszahlungen (Ausbaustufe 5). Eigene Personen, damit der Teil für sich allein rechnet. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, prow, row, rowHas, lnIs, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, prow, row, rowHas, lnIs, anonApi } = require('./lib');
 
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -132,7 +132,7 @@ module.exports = async function auszahlung(browser) {
   });
   await K('Kollege sieht „Auszahlung 5,00“ in seinen Buchungen (ohne Rückgängig) und sein restliches Guthaben', async () => {
     await kp.goto(`${CFG.url}?k=${code}`);
-    await kp.locator('.namegrid button', { hasText: /^Paul$/ }).click();
+    await pickName(kp, 'Paul');
     await kp.fill('#pin', '8181');
     await kp.locator('#kpin button.pri').click();
     await kp.locator('[data-a="k-consent"]').click();

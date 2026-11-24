@@ -1,6 +1,6 @@
 'use strict';
 /* Info-Knöpfe („i“) an den Überschriften: vorhanden, antippbar, Text passt zum Verhalten der App, nicht im Druck. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, row, sql, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, row, sql, isoDay } = require('./lib');
 
 module.exports = async function info(browser) {
   setGroup('Info-Knöpfe');
@@ -70,7 +70,7 @@ module.exports = async function info(browser) {
   });
   await K('Kollegen-Ansicht: vier Info-Knöpfe, per Fingertipp bedienbar, Fenster mit Text und OK', async () => {
     await kp.goto(`${CFG.url}?k=${code}`);
-    await kp.locator('.namegrid button', { hasText: /^Vera$/ }).click();
+    await pickName(kp, 'Vera');
     await kp.fill('#pin', '9191');
     await kp.locator('#kpin button.pri').click();
     await kp.locator('[data-a="k-consent"]').click();

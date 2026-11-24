@@ -1,6 +1,6 @@
 'use strict';
 /* Wunsch abgeben (Ausbaustufe 4): Kollegen geben Wünsche ab, gleiche werden zusammengezählt, der Verwalter sieht sie ohne Namen. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, anonApi } = require('./lib');
 
 module.exports = async function wunsch(browser) {
   setGroup('Wunsch');
@@ -47,7 +47,7 @@ module.exports = async function wunsch(browser) {
   await K('Kollegin: Abschnitt „Wunsch“ mit Knopf, Dialog lässt höchstens 60 Zeichen zu', async () => {
     expect(code, 'Vorbereitung fehlgeschlagen');
     await kp.goto(`${CFG.url}?k=${code}`);
-    await kp.locator('.namegrid button', { hasText: /^Mila$/ }).click();
+    await pickName(kp, 'Mila');
     await kp.fill('#pin', '7171');
     await kp.locator('#kpin button.pri').click();
     await kp.locator('[data-a="k-consent"]').click();
