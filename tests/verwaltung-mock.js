@@ -40,6 +40,7 @@ const data = {
     if (u.pathname.includes('/rpc/a_cash_box')) return r.fulfill({ json: { paid: 500, bar: 1320 } });
     if (u.pathname.includes('/rpc/a_storno')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_payout')) return r.fulfill({ json: 'ok' });
+    if (u.pathname.includes('/rpc/a_cleanup')) return r.fulfill({ json: null });
     if (u.pathname.includes('/rpc/a_fix')) return r.fulfill({ json: null });
     if (u.pathname.includes('/storage/v1/object/list')) return r.fulfill({ json: [] });
     if (u.pathname.includes('/auth/')) return r.fulfill({ json: {} });
