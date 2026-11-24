@@ -14,3 +14,17 @@ begin
 end $$;
 revoke execute on function k_wish(text, text) from public;
 grant execute on function k_wish(text, text) to anon, authenticated;
+
+-- Rückgängig: Buchung sperren, damit gleichzeitige Aufrufe den Bestand nicht doppelt erhöhen
+create or replace function k_undo(p_token text, p_entry uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid uuid := k_person(p_token); l ledger; s sales;
+begin
+  select * into l from ledger where id = p_entry and person_id = pid and kind = 'kauf'
+    and ts > now() - interval '5 minutes' and sale_id is not null for update;
+  if not found then return jsonb_build_object('ok', false); end if;
+  delete from sales where id = l.sale_id returning * into s;
+  if found then update products set stock = stock + s.qty where id = s.product_id; end if;
+  delete from ledger where id = l.id;
+  return jsonb_build_object('ok', true);
+end $$;

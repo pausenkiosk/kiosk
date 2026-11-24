@@ -121,7 +121,7 @@ function kRender() {
     <div class="paper"><h2>Bestand und Anschreiben</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen</h2>${s.entries.length ? s.entries.map(e =>
       `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
-      `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents > 0 ? '' : '−'}${eur(Math.abs(e.cents))}</span></div>`).join('')
+      `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents < 0 && e.kind !== 'zahlung' ? '−' : ''}${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
     <div class="paper"><h2>Wunsch</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
       <div class="row"><button class="btn" data-a="k-wish">Wunsch abgeben</button></div></div>
@@ -543,12 +543,13 @@ const aActs = {
   },
   'a-pay': async el => {
     const p = A.d.persons.find(x => x.id === el.dataset.id);
-    const saldo = A.d.ledger.filter(l => l.person_id === p.id).reduce((a, l) => a + l.amount_cents, 0);
+    const saldoNow = async () => (await pages(() => SB.from('ledger').select('amount_cents').eq('person_id', p.id).order('id'))).data.reduce((a, l) => a + l.amount_cents, 0);
+    const saldo = await saldoNow();
     const v = await ask('Einzahlung von ' + p.vorname, [{ k: 'c', label: 'Erhaltener Betrag €', mode: 'decimal' }], 'Einzahlung buchen',
       `<p class="small">${saldo > 0 ? `Offen: ${eur(saldo)} €. Alles darüber wird Guthaben.` : saldo < 0 ? `Vorhandenes Guthaben: ${eur(-saldo)} €. Der Betrag kommt dazu.` : 'Nichts offen. Der Betrag wird Guthaben.'}</p>`);
     const c = v && cents(v.c); if (!c || c <= 0) return;
     await rpc('a_pay', { p_person: p.id, p_cents: c });
-    const neu = saldo - c;
+    const neu = await saldoNow();
     toast(neu < 0 ? `Gebucht. ${p.vorname} hat jetzt ${eur(-neu)} € Guthaben.` : neu > 0 ? `Gebucht. Noch offen: ${eur(neu)} €.` : 'Gebucht. Schuldschein ist ausgeglichen.');
     await reload();
   },
