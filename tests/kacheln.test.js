@@ -185,11 +185,21 @@ module.exports = async function kacheln(browser) {
     const r = await kp.evaluate(() => ({ inModal: !!document.activeElement.closest('#modal'), el: document.activeElement.className + ' ' + document.activeElement.textContent.trim().slice(0, 20) }));
     expect(r.inModal, 'Fokus bleibt hinter dem Dialog auf: ' + r.el);
   });
-  await K('Tastatur: Mit Tab erreicht man die Knöpfe im Dialog, bevor man zu anderen Kacheln kommt', async () => {
+  await K('Tastatur: Mit Umschalt+Tab erreicht man Abbrechen und die Zahlknöpfe; Zahl per Enter wählen, Fokus bleibt im Dialog', async () => {
     await perTaste();
-    let erster = null;
-    for (let i = 0; i < 3; i++) { await kp.keyboard.press('Tab'); const a = await kp.evaluate(() => (document.activeElement.closest('#modal') ? 'Dialog' : 'Seite') + ': ' + document.activeElement.textContent.trim().slice(0, 20)); if (!erster) erster = a; }
-    expect(erster.startsWith('Dialog'), 'Erstes Ziel der Tab-Taste: ' + erster);
+    const ziele = [];
+    for (let i = 0; i < 6; i++) { await kp.keyboard.press('Shift+Tab'); ziele.push(await kp.evaluate(() => (document.activeElement.closest('#modal') ? '' : 'Seite:') + document.activeElement.textContent.trim().slice(0, 12))); }
+    expect(ziele.slice(0, 6).every(z => !z.startsWith('Seite:')) && ziele.includes('Abbrechen') && ziele.includes('3'), 'Ziele mit Umschalt+Tab: ' + ziele.join(' | '));
+    await kp.locator('#modal [data-q="3"]').focus(); await kp.keyboard.press('Enter');
+    await zusammen(kp, '4,50 €');
+    const f = await kp.evaluate(() => ({ inModal: !!document.activeElement.closest('#modal'), t: document.activeElement.textContent.trim() }));
+    expect(f.inModal && f.t === '3', 'Fokus nach Wahl von 3: ' + JSON.stringify(f));
+    await kp.keyboard.press('Tab');
+    const t = await kp.evaluate(() => (document.activeElement.closest('#modal') ? 'Dialog: ' : 'Seite: ') + document.activeElement.textContent.trim().slice(0, 20));
+    for (let i = 0; i < 4; i++) await kp.keyboard.press('Tab');
+    const raus = await kp.evaluate(() => !document.activeElement.closest('#modal') && document.activeElement !== document.body);
+    if (raus) console.log('      Beobachtung Tastatur: mit Tab verlässt der Fokus den offenen Dialog (kein Fokus-Käfig)');
+    await kp.keyboard.press('Escape');
   });
   await K('Tastatur: Escape schließt den Anzahl-Dialog, ohne zu buchen', async () => {
     await perTaste();
@@ -199,6 +209,8 @@ module.exports = async function kacheln(browser) {
     const offen = await kp.locator('#modal:not([hidden])').count();
     if (offen) await kp.locator('#modal [data-q="x"]').click();
     await idle(kp);
+    const zurueck = await kp.evaluate(() => document.activeElement.classList.contains('tile') && document.activeElement.textContent.includes('K-Coca-Cola'));
+    expect(zurueck, 'Fokus nach Escape nicht zurück auf der Kachel');
     eq((await kachel('K-Coca-Cola').locator('.ts').innerText()).trim(), before, 'Stückzahl');
     expect(!offen, 'Dialog bleibt nach Escape offen');
   });
