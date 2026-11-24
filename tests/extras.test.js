@@ -18,6 +18,7 @@ module.exports = async function extras(browser) {
   const must = async (fn, args) => { const r = await rpc(fn, args); expect(!r.error, `${fn}: ${r.error}`); return r.data; };
   const reload = async () => { await page.reload(); await page.locator('#nav:not([hidden])').waitFor(); };
   const ids = {}, prod = {}, tok = {};
+  let STORNO_REST = null;
   let code = null, api = null;
   const saldo = async n => (await db('ledger', 'amount_cents', 'person_id', ids[n])).reduce((a, l) => a + l.amount_cents, 0);
   const stock = async n => (await db('products', 'stock', 'id', prod[n]))[0].stock;
@@ -185,6 +186,8 @@ module.exports = async function extras(browser) {
     eq(await saldo('Elias'), 310, 'Saldo nach zweitem Versuch');
   });
   await K('Storno: Betrag wird gutgeschrieben, Bestand bleibt, Karte verschwindet', async () => {
+    const vk0 = (await db('sales', 'qty,kind', 'product_id', prod['E-Limo'])).filter(x => x.kind === 'app').reduce((a, x) => a + x.qty, 0);
+    const kauf0 = (await db('ledger', 'amount_cents,kind', 'person_id', ids.Elias)).filter(x => x.kind === 'kauf').reduce((a, x) => a + x.amount_cents, 0);
     await kp.locator('[data-a="k-cart"]').click();
     await inKorb('E-Limo', 3);
     eq(await bestellen('Raum 3.14'), 'Bestellt! Der Kiosk-Express ist informiert.', 'Hinweis');
@@ -196,8 +199,14 @@ module.exports = async function extras(browser) {
     const d = await lieferung();
     eq(J({ s: d.status, o: d.office, i: d.items }), J({ s: 'storniert', o: null, i: null }), 'Lieferung nach Storno');
     eq(await saldo('Elias'), 310, 'Saldo nach Storno'); eq(await stock('E-Limo'), st, 'Bestand nach Storno');
+    STORNO_REST = { verkauf: (await db('sales', 'qty,kind', 'product_id', prod['E-Limo'])).filter(x => x.kind === 'app').reduce((a, x) => a + x.qty, 0) - vk0,
+      rangliste: (await db('ledger', 'amount_cents,kind', 'person_id', ids.Elias)).filter(x => x.kind === 'kauf').reduce((a, x) => a + x.amount_cents, 0) - kauf0 };
     await kReload(); const k = await karte();
     expect(!k || k.schritt === 'Geliefert', 'Statuskarte nach Storno zeigt die stornierte Bestellung: ' + JSON.stringify(k));   // sichtbar bleibt höchstens die frühere, gelieferte
+  });
+  await S('Storno nimmt die Lieferung auch aus „Verkauf letzte 4 Wochen“ und aus der Rangliste heraus', async () => {
+    expect(STORNO_REST, 'Storno-Schritt lief nicht');
+    eq(J(STORNO_REST), J({ rangliste: 0, verkauf: 0 }), 'nach dem Storno noch gezählt (Stück im Verkauf / Cent in der Rangliste)');
   });
   await K('Rückgängig auf die Lieferbuchung + Storno ergibt keine doppelte Gutschrift', async () => {
     await kp.locator('[data-a="k-cart"]').click();
