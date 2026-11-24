@@ -422,7 +422,7 @@ function vBon() {
     ${ln('KASSENSTAND ' + ii('kasse'), eur(stand), 'big' + (stand < 0 ? ' neg' : ''))}
     <p class="small mut">Seit Beginn des Kiosks. Monate, Wochen und einzelne Buchungen unter Kasse.</p>
     <hr>${(() => { const on = d.set.liefer_aktiv !== '0';
-      return `<div class="it express-sw"><i class="lamp ${on ? 'g' : 'r'}"></i><span><b>Kiosk-Express</b> ${on ? 'liefert heute' : 'hat heute frei'}</span><span></span><span><button class="btn sm${on ? '' : ' pri'}" data-a="a-express" data-v="${on ? '0' : '1'}">${on ? 'Ausschalten' : 'Einschalten'}</button></span></div>`; })()}
+      return `<div class="it express-sw ${on ? 'on' : 'off'}"><i class="lamp ${on ? 'g' : 'r'}"></i><span><b>Kiosk-Express</b> ${on ? 'liefert heute' : 'hat heute frei'}</span><span></span><span><button class="btn sm${on ? '' : ' pri'}" data-a="a-express" data-v="${on ? '0' : '1'}">${on ? 'Ausschalten' : 'Einschalten'}</button></span></div>`; })()}
     ${ln('Offene Schuldscheine', eur(offen))}
     ${guthaben ? ln('Guthaben der Kollegen', eur(guthaben)) : ''}
     ${ln('Abgleich Ware/Kasse ' + ii('fehl'), fehl)}
