@@ -2,7 +2,7 @@
 /* Francos Wünsche (ab app.js v23):
    1. Personenliste der Verwaltung: Schulden rot mit Minus, Guthaben grün, Knöpfe in eigener Zeile.
    2. Erste Seite: „Läuft als Nächstes ab“ – die drei nächsten Haltbarkeitsdaten, auch wenn es noch lange hin ist. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, see, prow, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, prow, anonApi, isoDay } = require('./lib');
 
 module.exports = async function liste(browser) {
   setGroup('Personenliste und nächste Abläufe');
@@ -24,6 +24,7 @@ module.exports = async function liste(browser) {
     return { text: el.textContent.trim(), cls: el.className, farbe, fett: Number(getComputedStyle(el).fontWeight) >= 600 };
   });
 
+  const feldReload = async name => { await reload(); await tab('leute'); return feld(name); };
   await S('Vorbereitung: anmelden; Quirin 4,50 Schulden, Qara 12,00 Guthaben, Quno 0,00, Quendolin-Maximilian 1.234,56 Guthaben', async () => {
     await page.goto(CFG.url + '#verwaltung');
     await page.locator('#alog').waitFor();
@@ -100,6 +101,56 @@ module.exports = async function liste(browser) {
   await S('Reihenfolge der Liste: höchste Schulden zuerst, höchstes Guthaben zuletzt', async () => {
     const vals = await page.locator('#app .paper').first().locator('.it').evaluateAll(rs => rs.map(r => { const t = r.children[2]; const n = Number(t.textContent.replace('−', '').replace(/\./g, '').replace(',', '.')); return t.className.includes('pos') ? -n : n; }));
     expect(vals.every((v, i) => i === 0 || vals[i - 1] >= v), 'Reihenfolge der Salden: ' + vals.join(', '));
+  });
+  /* ---------- eigene Seite des Kollegen (ab v24) ---------- */
+  const kp = await newPage(browser);
+  const K = (n, f) => step(n, f, kp);
+  let code = null;
+  const kLogin = async (name, pin) => {
+    if (!code) code = (await db('settings', 'value', 'key', 'kiosk_code'))[0].value;
+    await kp.goto(`${CFG.url}?k=${code}`);
+    await kp.evaluate(() => { localStorage.removeItem('ktoken'); localStorage.removeItem('kfav'); });
+    await kp.goto(`${CFG.url}?k=${code}`);
+    await pickName(kp, name);
+    await kp.fill('#pin', pin); await kp.locator('#kpin button.pri').click();
+    await kp.waitForFunction(() => /Kurz vorab|Schuldschein von/.test(document.querySelector('#app').textContent));
+    if (await kp.locator('[data-a="k-consent"]').count()) await kp.locator('[data-a="k-consent"]').click();
+    await see(kp, 'Schuldschein von ' + name);
+  };
+  const kFeld = () => kp.locator('#app .ln.big').first().evaluate(l => {
+    const v = l.children[1], inner = v.querySelector('span') || v;
+    const [r, g, b] = getComputedStyle(inner).color.match(/\d+/g).map(Number);
+    const [br, bg, bb] = getComputedStyle(l.children[0]).color.match(/\d+/g).map(Number);
+    return { label: l.children[0].textContent.replace(/\s*i$/, '').trim(), text: v.textContent.trim(),
+      farbe: r > g + 40 && r > b + 40 ? 'rot' : g > r + 25 && g > b + 15 ? 'grün' : (r === br && g === bg && b === bb ? 'neutral' : 'andere') };
+  });
+  await K('Kollege mit Schulden sieht „OFFEN“ rot mit Minus davor', async () => {
+    await kLogin('Quirin', '5151');
+    eq(JSON.stringify(await kFeld()), JSON.stringify({ label: 'OFFEN', text: '−4,50 €', farbe: 'rot' }), 'Anzeige');
+  });
+  await K('Kollegin mit Guthaben sieht „DEIN GUTHABEN“ grün ohne Vorzeichen', async () => {
+    await kLogin('Qara', '5252');
+    eq(JSON.stringify(await kFeld()), JSON.stringify({ label: 'DEIN GUTHABEN', text: '12,00 €', farbe: 'grün' }), 'Anzeige');
+  });
+  await K('Wechsel vom Guthaben ins Minus durch einen Kauf: Anzeige springt auf „OFFEN“, rot, mit Minus', async () => {
+    const p = (await kp.evaluate(async () => (await SB.rpc('k_state', { p_token: K.token })).data.products.filter(x => x.cents >= 100)))[0];
+    const stueck = Math.floor(1200 / p.cents) + 1;                     // so viele, dass das Guthaben von 12,00 gerade überschritten ist
+    let rest = stueck;
+    while (rest > 0) { const q = Math.min(5, rest); await idle(kp); await hideToast(kp);
+      await kp.locator('button.it', { hasText: p.name }).first().click(); await fillModal(kp, p.name, { qty: q }); await toast(kp, /angeschrieben/); rest -= q; }
+    await idle(kp);
+    const offen = stueck * p.cents - 1200;
+    eq(JSON.stringify(await kFeld()), JSON.stringify({ label: 'OFFEN', text: '−' + (offen / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' €', farbe: 'rot' }), `Anzeige nach ${stueck} × ${p.name}`);
+    const f = await feldReload('Qara');
+    eq(`${f.text}/${f.farbe}`, '−' + (offen / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + '/rot', 'Anzeige in der Verwalter-Liste');
+  });
+  await K('Genau 0,00: „OFFEN 0,00 €“ ohne Farbe und ohne Minus; Kiosk-Ansicht sonst unverändert', async () => {
+    await kLogin('Quno', '5353');
+    eq(JSON.stringify(await kFeld()), JSON.stringify({ label: 'OFFEN', text: '0,00 €', farbe: 'neutral' }), 'Anzeige');
+    await see(kp, 'Bezahlen oder Guthaben aufladen');
+    const real = kp.problems.filter(x => !/favicon/i.test(x));
+    expect(real.length === 0, real.join(' · '));
+    await kp.context().close();
   });
   await S('Nach einer Einzahlung über den offenen Betrag hinaus wechselt die Anzeige von rot/Minus auf grün', async () => {
     await hideToast(page);

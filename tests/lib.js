@@ -153,7 +153,8 @@ async function lnValue(page, label) {
 async function lnIs(page, label, expected) {
   try {
     await page.waitForFunction(([lb, ex]) => [...document.querySelectorAll('#app .ln')]
-      .some(e => e.children[0].textContent.includes(lb) && e.children[1].textContent.trim() === ex), [label, expected]);
+      .some(e => e.children[0].textContent.includes(lb) && (e.children[1].textContent.trim() === ex ||
+        (lb === 'OFFEN' && e.children[1].textContent.trim() === '−' + ex))), [label, expected]);   // ab v24 stehen Schulden beim Kollegen mit Minus
   } catch {
     let now; try { now = await lnValue(page, label); } catch { now = '(fehlt)'; }
     throw new Error(`„${label}“: erwartet „${expected}“, tatsächlich „${now}“`);
