@@ -44,6 +44,7 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein – in der F
 | `liste.test.js` | Personenliste (Schulden rot mit Minus, Guthaben grün, Umbruch am Handy) und „Läuft als Nächstes ab“ auf der ersten Seite |
 | `sichtbar.test.js` | Kollegen sehen nur Produkte mit Bestand; „PIN ändern“ mit Wiederholung der neuen PIN |
 | `kacheln.test.js` | Kachel-Ansicht der Kollegen: Umschalter und Merken, Anschreiben, Tastatur, Handy-Breiten, Produktbilder |
+| `extras.test.js` | Kiosk-Express (Lieferkorb, Status, Bewertung, Storno, Prüfungen, Rechte, Aufräumen) und Adventskalender (Regeln, gleichzeitige Käufe) |
 | `uebergang.test.js` | (nur auf Wunsch, für den Wechsel von v14 auf Ausbaustufe 3) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
 | `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
 | `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |

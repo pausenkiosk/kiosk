@@ -1,0 +1,388 @@
+'use strict';
+/* Kiosk-Express (Lieferkorb) und Adventskalender (ab app.js v32, Ausbaustufe 7). */
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, loggedOut, anzahl, see, lnIs, anonApi, sql, isoDay } = require('./lib');
+
+/* JSON mit sortierten Schlüsseln, damit die Reihenfolge der Felder egal ist */
+const J = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(n => [n, x[n]])) : x);
+
+module.exports = async function extras(browser) {
+  setGroup('Kiosk-Express und Adventskalender');
+  const page = await newPage(browser);                     // Verwalter
+  const kp = await newPage(browser, { hasTouch: true });    // Handy von Elias
+  const S = (n, f) => step(n, f, page), K = (n, f) => step(n, f, kp);
+  const db = (table, select, filterCol, filterVal) => page.evaluate(async ([t, s, c, v]) => {
+    let q = SB.from(t).select(s); if (c) q = q.eq(c, v);
+    const { data, error } = await q; if (error) throw new Error(error.message); return data;
+  }, [table, select, filterCol, filterVal]);
+  const rpc = (fn, args) => page.evaluate(async ([f, a]) => { const { data, error } = await SB.rpc(f, a); return error ? { error: error.message } : { data }; }, [fn, args]);
+  const must = async (fn, args) => { const r = await rpc(fn, args); expect(!r.error, `${fn}: ${r.error}`); return r.data; };
+  const reload = async () => { await page.reload(); await page.locator('#nav:not([hidden])').waitFor(); };
+  const ids = {}, prod = {}, tok = {};
+  let code = null, api = null;
+  const saldo = async n => (await db('ledger', 'amount_cents', 'person_id', ids[n])).reduce((a, l) => a + l.amount_cents, 0);
+  const stock = async n => (await db('products', 'stock', 'id', prod[n]))[0].stock;
+  const call = async (fn, data) => { const r = await api.post('/rest/v1/rpc/' + fn, { data }); const t = await r.text(); try { return JSON.parse(t); } catch { return { status: r.status(), text: t.slice(0, 160) }; } };
+  const setS = (k, v) => sql(`insert into settings values ('${k}', '${v}') on conflict (key) do update set value = excluded.value`);
+  const kReload = async () => { await kp.reload(); await see(kp, 'Schuldschein von Elias'); await idle(kp); };
+  const bar = () => kp.evaluate(() => { const b = document.querySelector('#cartbar'); return b ? { text: b.innerText.replace(/\s+/g, ' ').trim(), ok: !b.querySelector('[data-a="k-cart-ok"]').disabled } : null; });
+  const inKorb = async (name, n) => { await idle(kp); await hideToast(kp); await kp.locator('button.it', { hasText: name }).first().click(); await anzahl(kp, name, n); await toast(kp, new RegExp(`${n} × ${name} im Lieferkorb`)); await idle(kp); };
+  const bestellen = async office => {
+    await idle(kp); await hideToast(kp);
+    await kp.locator('#cartbar [data-a="k-cart-ok"]').click();
+    await fillModal(kp, 'Liefern lassen', { o: office });
+    await kp.waitForFunction(() => !document.querySelector('#toast').hidden);
+    const t = await kp.locator('#toast').innerText(); await idle(kp); return t;
+  };
+  const karte = () => kp.evaluate(() => { const c = document.querySelector('.express'); return c ? { schritt: [...c.querySelectorAll('.steps .on')].map(x => x.textContent).pop(), text: c.innerText.replace(/\s+/g, ' ') } : null; });
+  const lieferung = async () => (await db('deliveries', 'id,person_id,office,items,total_cents,status,rating,tip,created_at')).filter(d => d.person_id === ids.Elias).sort((a, b) => a.created_at < b.created_at ? 1 : -1)[0];
+  const adminDel = async (status, confirm = true) => {
+    await reload(); await hideToast(page);
+    await page.locator(`#app [data-a="a-del"][data-s="${status}"]`).first().click();
+    if (status === 'storniert') { await page.locator('#modal h2', { hasText: 'Lieferung stornieren?' }).waitFor(); await page.locator(confirm ? '#modal button.pri' : '#modal [data-a="m-x"]').click(); }
+    await idle(page);
+  };
+
+  await S('Vorbereitung: anmelden, Testprodukte und Personen (Elias, Frieda, Gustav, Hilde, Ida) anlegen', async () => {
+    await page.goto(CFG.url + '#verwaltung');
+    await page.locator('#alog').waitFor();
+    await page.fill('#em', CFG.email); await page.fill('#pw', CFG.pw);
+    await page.locator('#alog button.pri').click();
+    await see(page, 'KASSENSTAND');
+    code = (await db('settings', 'value', 'key', 'kiosk_code'))[0].value;
+    await sql(`delete from settings where key = 'ntfy_topic'`);
+    const rows = await page.evaluate(async () => {
+      const { data, error } = await SB.from('products').insert([
+        { name: 'E-Riegel', category: 'Expresstest', price_cents: 100, cost_cents: 50, stock: 40 },
+        { name: 'E-Limo', category: 'Expresstest', price_cents: 149, stock: 40 },
+        { name: 'E-Inaktiv', category: 'Expresstest', price_cents: 900, stock: 10, active: false },
+        { name: 'E-Frueh', category: 'Adventtest', price_cents: 25, cost_cents: 12, stock: 3 },
+        { name: 'E-Bonbon', category: 'Adventtest', price_cents: 30, stock: 3 },
+        { name: 'E-Teuer', category: 'Adventtest', price_cents: 50, stock: 3 },
+        { name: 'E-Spaet', category: 'Adventtest', price_cents: 20, stock: 3 }].map(r => ({ active: true, cost_cents: null, ...r }))).select('id,name');
+      if (error) throw new Error(error.message); return data;
+    });
+    rows.forEach(r => { prod[r.name] = r.id; });
+    for (const [n, p] of [['Elias', '1212'], ['Frieda', '2323'], ['Gustav', '3434'], ['Hilde', '4545'], ['Ida', '5656']]) ids[n] = await must('a_person', { p_vorname: n, p_pin: p });
+    api = await anonApi();
+    for (const [n, p] of [['Frieda', '2323'], ['Gustav', '3434'], ['Hilde', '4545'], ['Ida', '5656']]) {
+      const l = await call('k_login', { p_code: code, p_person: ids[n], p_pin: p }); expect(l.ok, 'Anmeldung ' + n); tok[n] = l.token;
+      await call('k_consent', { p_token: l.token });
+    }
+  });
+
+  /* ---------- Kiosk-Express ---------- */
+  await K('Kollege: Knopf „Liefern lassen (ab 3 € frei Haus)“; ohne ihn wird wie bisher angeschrieben', async () => {
+    await kp.goto(`${CFG.url}?k=${code}`);
+    await pickName(kp, 'Elias');
+    await kp.fill('#pin', '1212'); await kp.locator('#kpin button.pri').click();
+    await kp.locator('[data-a="k-consent"]').click();
+    await see(kp, 'Schuldschein von Elias');
+    eq((await kp.locator('[data-a="k-cart"]').innerText()).trim(), 'Liefern lassen (ab 3 € frei Haus)', 'Knopf');
+    eq(await bar(), null, 'Lieferkorb-Balken ohne Lieferkorb');
+  });
+  await K('Lieferkorb: leer, Balken unten, Bestellen gesperrt; Antippen legt in den Korb statt anzuschreiben', async () => {
+    await kp.locator('[data-a="k-cart"]').click();
+    await see(kp, 'Lieferkorb: Produkte antippen, unten bestellen.');
+    let b = await bar();
+    expect(b && b.text.startsWith('Lieferkorb: 0 Artikel · 0,00 €') && b.text.includes('Produkte antippen zum Hinzufügen.') && !b.ok, 'Balken: ' + JSON.stringify(b));
+    await kp.locator('button.it', { hasText: 'E-Riegel' }).first().click();
+    eq((await kp.locator('#modal [data-q="ok"]').innerText()).trim(), 'In den Lieferkorb', 'Knopf im Anzahl-Dialog');
+    await anzahl(kp, 'E-Riegel', 2);
+    await toast(kp, /^2 × E-Riegel im Lieferkorb\.$/);
+    b = await bar();
+    expect(b.text.includes('Lieferkorb: 2 Artikel · 2,00 €') && b.text.includes('Für 2,00 € steht der Lieferant nicht auf. Noch 1,00 € bis frei Haus.') && !b.ok, 'Balken unter 3 €: ' + JSON.stringify(b));
+    eq(await saldo('Elias'), 0, 'Saldo Elias (nichts gebucht)');
+  });
+  await K('Ab 3,00 € wird Bestellen freigegeben; Abbrechen leert den Korb, nichts gebucht', async () => {
+    await inKorb('E-Riegel', 1);
+    const b = await bar();
+    expect(b.text.includes('3 Artikel · 3,00 €') && b.text.includes('Lieferung frei Haus!') && b.ok, 'Balken ab 3 €: ' + JSON.stringify(b));
+    await kp.locator('#cartbar [data-a="k-cart-x"]').click(); await idle(kp);
+    eq(await bar(), null, 'Balken nach Abbrechen');
+    eq(await saldo('Elias'), 0, 'Saldo Elias');
+  });
+  await K('Balken und Hinweise verdecken bei 320 px nichts; Hinweise erscheinen oben, solange der Korb offen ist', async () => {
+    await kp.setViewportSize({ width: 320, height: 568 });
+    try {
+      await kp.locator('[data-a="k-cart"]').click();
+      await inKorb('E-Limo', 1);
+      const m = await kp.evaluate(() => {
+        const bar = document.querySelector('#cartbar').getBoundingClientRect(), t = document.querySelector('#toast'); window.scrollTo(0, document.body.scrollHeight);
+        const last = [...document.querySelectorAll('#app button')].pop().getBoundingClientRect();
+        return { barH: bar.height, top: t.classList.contains('top'), lastBottom: last.bottom, barTop: document.querySelector('#cartbar').getBoundingClientRect().top,
+          btns: [...document.querySelectorAll('#cartbar button')].map(b => { const r = b.getBoundingClientRect(); return r.right <= innerWidth && r.bottom <= innerHeight && r.height >= 40; }) };
+      });
+      expect(m.top, 'Hinweis erscheint nicht oben');
+      expect(m.lastBottom <= m.barTop + 1, `letzter Knopf der Seite liegt unter dem Balken (${Math.round(m.lastBottom)} > ${Math.round(m.barTop)})`);
+      expect(m.btns.every(Boolean), 'Knöpfe im Balken nicht voll sichtbar oder zu klein');
+      await kp.locator('#cartbar [data-a="k-cart-x"]').click(); await idle(kp);
+    } finally { await kp.setViewportSize({ width: 390, height: 844 }); }
+  });
+  await K('Bestellen: Büro wird abgefragt (max. 40 Zeichen); leer bestellt nichts', async () => {
+    await kp.locator('[data-a="k-cart"]').click();
+    await inKorb('E-Riegel', 3);
+    await kp.locator('#cartbar [data-a="k-cart-ok"]').click();
+    const m = kp.locator('#modal:not([hidden])');
+    await m.locator('h2', { hasText: 'Liefern lassen' }).waitFor();
+    eq(await m.locator('#f_o').getAttribute('maxlength'), '40', 'Zeichenbegrenzung');
+    await see(kp, '1 Posten für 3,00 € werden sofort angeschrieben.', '#modal');
+    await fillModal(kp, 'Liefern lassen', { o: '   ' }); await idle(kp);
+    eq(await saldo('Elias'), 0, 'Saldo Elias nach leerem Büro');
+    expect(await bar(), 'Lieferkorb nach leerem Büro verschwunden');
+  });
+  let d1 = null;
+  await K('Bestellen: sofort angeschrieben, Statuskarte „Bestellt“, Büro gemerkt, Knopf „Liefern lassen“ weg', async () => {
+    eq(await bestellen('Raum 3.14'), 'Bestellt! Der Kiosk-Express ist informiert.', 'Hinweis');
+    eq(await saldo('Elias'), 300, 'Saldo Elias');
+    await lnIs(kp, 'OFFEN', '3,00 €');
+    const k = await karte(); expect(k && k.schritt === 'Bestellt' && /Bestellung eingegangen/.test(k.text), 'Statuskarte: ' + JSON.stringify(k));
+    eq(await kp.evaluate(() => localStorage.getItem('kbuero')), 'Raum 3.14', 'gemerktes Büro');
+    eq(await kp.locator('[data-a="k-cart"]').count(), 0, 'Knopf „Liefern lassen“ bei offener Lieferung');
+    d1 = await lieferung();
+    eq(J({ o: d1.office, i: d1.items, t: d1.total_cents, s: d1.status }), J({ o: 'Raum 3.14', i: [{ name: 'E-Riegel', qty: 3 }], t: 300, s: 'neu' }), 'Lieferung in der Datenbank');
+    eq(await stock('E-Riegel'), 37, 'Bestand E-Riegel');
+  });
+  await K('Zweite Bestellung bei offener Lieferung wird abgelehnt (auch direkt); Büro wird beim nächsten Mal vorgeschlagen', async () => {
+    const t = await kp.evaluate(() => localStorage.getItem('ktoken'));
+    const r = await call('k_deliver', { p_token: t, p_items: [{ id: prod['E-Riegel'], qty: 3 }], p_office: 'X' });
+    eq(J(r), J({ ok: false, err: 'offen' }), 'Antwort');
+    eq(await saldo('Elias'), 300, 'Saldo Elias');
+  });
+  await S('Verwaltung: Bon zeigt „Kiosk-Express“ mit Vorname, Büro, Artikeln, Betrag und Knöpfen', async () => {
+    await reload();
+    const sec = await page.evaluate(() => { const h = [...document.querySelectorAll('#app h2')].find(x => x.textContent.startsWith('Kiosk-Express')); if (!h) return null;
+      const r = h.nextElementSibling; return { h: h.textContent.replace(/\s*i$/, '').trim(), text: r.innerText.replace(/\s+/g, ' '), knoepfe: [...r.querySelectorAll('button')].map(b => b.textContent).join('|') }; });
+    expect(sec, 'Abschnitt fehlt');
+    eq(sec.h, 'Kiosk-Express (1)', 'Überschrift');
+    expect(sec.text.includes('Elias · Büro Raum 3.14') && sec.text.includes('3 × E-Riegel · 3,00 €') && sec.text.includes('neu'), 'Zeile: ' + sec.text);
+    eq(sec.knoepfe, 'Unterwegs|Geliefert|Storno', 'Knöpfe');
+  });
+  await S('„Unterwegs“: Kollege sieht den Schritt, Verwaltung zeigt nur noch Geliefert/Storno', async () => {
+    await adminDel('unterwegs');
+    await kReload();
+    const k = await karte(); expect(k.schritt === 'Unterwegs' && /Unterwegs!/.test(k.text), 'Statuskarte: ' + JSON.stringify(k));
+    await reload();
+    eq((await page.locator('#app [data-a="a-del"]').allInnerTexts()).join('|'), 'Geliefert|Storno', 'Knöpfe');
+  });
+  await S('„Geliefert“: Büro und Artikel gelöscht, Kollege kann bewerten, Abschnitt verschwindet', async () => {
+    await adminDel('geliefert');
+    const d = await lieferung();
+    eq(J({ o: d.office, i: d.items, s: d.status }), J({ o: null, i: null, s: 'geliefert' }), 'Lieferung nach „geliefert“');
+    expect(!(await page.locator('#app h2', { hasText: 'Kiosk-Express' }).count()), 'Abschnitt steht noch auf dem Bon');
+    await kReload();
+    const k = await karte(); expect(k.schritt === 'Geliefert' && k.text.includes('Wie war die Lieferung?'), 'Statuskarte: ' + JSON.stringify(k));
+    expect(await kp.locator('[data-a="k-rate-ok"]').isDisabled(), '„Bewerten“ ohne Auswahl freigegeben');
+    expect(await kp.locator('[data-a="k-cart"]').count() === 1, 'Knopf „Liefern lassen“ nach der Lieferung fehlt');
+  });
+  await K('Bewertung 4 Schokoriegel + 10 Cent Trinkgeld: einmalig, Trinkgeld auf dem Schuldschein', async () => {
+    await kp.locator('[data-a="k-rate"][data-v="4"]').click(); await idle(kp);
+    eq((await kp.locator('[data-a="k-rate"]').evaluateAll(bs => bs.map(b => b.getAttribute('aria-pressed')))).join(','), 'true,true,true,true,false', 'markierte Riegel');
+    await kp.locator('[data-a="k-tip"][data-v="10cent"]').click(); await idle(kp);
+    await kp.locator('[data-a="k-rate-ok"]').click(); await idle(kp);
+    await see(kp, 'Danke für 4 von 5 Schokoriegeln! Die 10 Cent Trinkgeld stehen auf deinem Schuldschein.');
+    eq(await saldo('Elias'), 310, 'Saldo Elias');
+    await see(kp, 'Trinkgeld');
+    const d = await lieferung(); eq(`${d.rating}/${d.tip}`, '4/10cent', 'Bewertung in der Datenbank');
+    const t = await kp.evaluate(() => localStorage.getItem('ktoken'));
+    eq(J(await call('k_rate', { p_token: t, p_id: d.id, p_rating: 5, p_tip: '10cent' })), 'false', 'zweite Bewertung');
+    eq(await saldo('Elias'), 310, 'Saldo nach zweitem Versuch');
+  });
+  await K('Storno: Betrag wird gutgeschrieben, Bestand bleibt, Karte verschwindet', async () => {
+    await kp.locator('[data-a="k-cart"]').click();
+    await inKorb('E-Limo', 3);
+    eq(await bestellen('Raum 3.14'), 'Bestellt! Der Kiosk-Express ist informiert.', 'Hinweis');
+    eq(await saldo('Elias'), 310 + 447, 'Saldo nach Bestellung');
+    const st = await stock('E-Limo');
+    await adminDel('storniert', false);
+    eq((await lieferung()).status, 'neu', 'Status nach abgebrochenem Storno');
+    await adminDel('storniert');
+    const d = await lieferung();
+    eq(J({ s: d.status, o: d.office, i: d.items }), J({ s: 'storniert', o: null, i: null }), 'Lieferung nach Storno');
+    eq(await saldo('Elias'), 310, 'Saldo nach Storno'); eq(await stock('E-Limo'), st, 'Bestand nach Storno');
+    await kReload(); const k = await karte();
+    expect(!k || k.schritt === 'Geliefert', 'Statuskarte nach Storno zeigt die stornierte Bestellung: ' + JSON.stringify(k));   // sichtbar bleibt höchstens die frühere, gelieferte
+  });
+  await K('Lücke: Rückgängig auf die Lieferbuchung, danach Storno → Kollege bekommt den Betrag zweimal zurück', async () => {
+    await kp.locator('[data-a="k-cart"]').click();
+    await inKorb('E-Riegel', 3);
+    await bestellen('Raum 3.14');
+    const vor = 310, nach = await saldo('Elias');
+    eq(nach, vor + 300, 'Saldo nach Bestellung');
+    const undo = await kp.locator('[data-a="k-undo"]').count();
+    if (undo) { await hideToast(kp); await kp.locator('[data-a="k-undo"]').first().click(); await toast(kp, /Buchung zurückgenommen/); await idle(kp); }
+    const nachUndo = await saldo('Elias');
+    const d = await lieferung();
+    await adminDel('storniert');
+    const end = await saldo('Elias');
+    eq(end, vor, `Saldo am Ende (Rückgängig-Knopf an der Lieferbuchung: ${undo ? 'ja' : 'nein'}; nach Rückgängig ${nachUndo}, Lieferung weiter offen über ${d.total_cents} Cent, Storno schreibt ${d.total_cents} gut)`);
+  });
+  await S('Direkt: Mindestwert, Büro, Menge, Einwilligung werden vor dem Buchen geprüft; nichts halb gebucht', async () => {
+    const t = tok.Frieda, l0 = (await db('ledger', 'id', 'person_id', ids.Frieda)).length, s0 = await stock('E-Riegel'), d0 = (await db('deliveries', 'id')).length;
+    const F = [
+      [[{ id: prod['E-Riegel'], qty: 2 }, { id: prod['E-Inaktiv'], qty: 5 }], 'B', 'mindest', 'inaktives Produkt zählt nicht zum Mindestwert'],
+      [[{ id: prod['E-Riegel'], qty: 2 }, { id: prod['E-Limo'], qty: 11 }], 'B', 'mindest', 'Menge 11 zählt nicht'],
+      [[{ id: prod['E-Riegel'], qty: 2 }, { id: prod['E-Limo'], qty: 0 }], 'B', 'mindest', 'Menge 0 zählt nicht'],
+      [[{ id: prod['E-Riegel'], qty: 3 }], '', 'buero', 'leeres Büro'],
+      [[{ id: prod['E-Riegel'], qty: 3 }], 'x'.repeat(41), 'buero', 'Büro mit 41 Zeichen'],
+      [[], 'B', 'leer', 'leerer Korb'],
+      [Array.from({ length: 21 }, () => ({ id: prod['E-Riegel'], qty: 1 })), 'B', 'leer', '21 Posten'],
+      [{ id: prod['E-Riegel'], qty: 5 }, 'B', 'leer', 'kein Array']];
+    const bad = [];
+    for (const [items, o, err, was] of F) { const r = await call('k_deliver', { p_token: t, p_items: items, p_office: o }); if (!(r && r.ok === false && r.err === err)) bad.push(`${was}: ${JSON.stringify(r).slice(0, 120)}`); }
+    const r1 = await call('k_deliver', { p_token: t, p_items: [{ id: prod['E-Riegel'], qty: 2 }, { id: 'kein-uuid', qty: 2 }], p_office: 'B' });
+    const r2 = await call('k_deliver', { p_token: 'erfunden', p_items: [{ id: prod['E-Riegel'], qty: 5 }], p_office: 'B' });
+    if (!(r2 && r2.err === 'sitzung')) bad.push('erfundene Sitzung: ' + JSON.stringify(r2));
+    eq((await db('ledger', 'id', 'person_id', ids.Frieda)).length, l0, `Buchungen von Frieda (ungültige Kennung: ${JSON.stringify(r1).slice(0, 80)})`);
+    eq(await stock('E-Riegel'), s0, 'Bestand E-Riegel'); eq((await db('deliveries', 'id')).length, d0, 'Lieferungen');
+    expect(bad.length === 0, bad.join(' · '));
+  });
+  await S('Direkt: ohne Einwilligung keine Lieferung', async () => {
+    const l = await call('k_login', { p_code: code, p_person: (await must('a_person', { p_vorname: 'Jana', p_pin: '6767' })), p_pin: '6767' });
+    const r = await call('k_deliver', { p_token: l.token, p_items: [{ id: prod['E-Riegel'], qty: 5 }], p_office: 'B' });
+    eq(J(r), J({ ok: false, err: 'einwilligung' }), 'Antwort');
+  });
+  await S('Gültige Posten werden gebucht, ungültige (Menge 11, inaktiv) übersprungen; Gesamtbetrag stimmt', async () => {
+    const r = await call('k_deliver', { p_token: tok.Frieda, p_items: [{ id: prod['E-Riegel'], qty: 3 }, { id: prod['E-Limo'], qty: 11 }, { id: prod['E-Inaktiv'], qty: 1 }], p_office: 'Lager' });
+    expect(r.ok && r.summe === 300, 'Antwort: ' + JSON.stringify(r));
+    const d = (await db('deliveries', 'items,total_cents', 'person_id', ids.Frieda))[0];
+    eq(J(d), J({ items: [{ name: 'E-Riegel', qty: 3 }], total_cents: 300 }), 'Lieferung');
+    await must('a_delivery', { p_id: r.id, p_status: 'geliefert' });
+  });
+  await S('Mehrere gleichzeitige Bestellungen derselben Person: höchstens eine offene Lieferung', async () => {
+    const d0 = (await db('deliveries', 'id', 'person_id', ids.Gustav)).length, s0 = await stock('E-Riegel');
+    const rs = await Promise.all([1, 2, 3, 4].map(() => call('k_deliver', { p_token: tok.Gustav, p_items: [{ id: prod['E-Riegel'], qty: 3 }], p_office: 'Werkstatt' })));
+    const okN = rs.filter(r => r.ok).length, n = (await db('deliveries', 'id', 'person_id', ids.Gustav)).length - d0;
+    const gebucht = (await db('ledger', 'amount_cents', 'person_id', ids.Gustav)).reduce((a, l) => a + l.amount_cents, 0);
+    for (const r of rs.filter(r => r.ok)) await must('a_delivery', { p_id: r.id, p_status: 'storniert' });
+    eq(`${okN}/${n}/${s0 - await stock('E-Riegel')}/${gebucht}`, '1/1/3/300', 'erfolgreiche Antworten / neue Lieferungen / abgebuchter Bestand / gebuchter Betrag in Cent');
+  });
+  await S('Benachrichtigung: ohne Kanal kein Fehler und kein Hinweis; „Einrichten“ erzeugt geheimen Kanal kiosk-+24 Zeichen', async () => {
+    const al = (await db('alerts', 'text')).filter(a => /Benachrichtigung/.test(a.text));
+    eq(al.length, 0, 'Hinweise „Benachrichtigung konnte nicht gesendet werden“');
+    await page.locator('#nav [data-t="leute"]').click();
+    await see(page, 'Noch keine Benachrichtigung eingerichtet.');
+    await page.locator('#app [data-a="a-ntfy"]').click();
+    await fillModal(page, 'Benachrichtigung einrichten', {});
+    await idle(page);
+    const topic = ((await db('settings', 'value', 'key', 'ntfy_topic'))[0] || {}).value;
+    await sql(`delete from settings where key = 'ntfy_topic'`);   // sofort wieder entfernen: Testbestellungen sollen nichts an ntfy.sh senden
+    expect(/^kiosk-[0-9a-f]{24}$/.test(topic || ''), 'Kanal: ' + topic);
+  });
+  await S('Rechte: ohne Anmeldung kein Zugriff auf Lieferungen, Gewinne und interne Funktionen', async () => {
+    const bad = [];
+    for (const t of ['deliveries', 'advent_wins']) { const r = await api.get(`/rest/v1/${t}?select=*`); if (r.status() < 400) bad.push(`${t} lesbar (${r.status()})`); }
+    for (const [f, a] of [['k_notify', { p_title: 'x', p_body: 'x' }], ['k_buy_one', { pid: ids.Elias, p_product: prod['E-Riegel'], p_qty: 1 }], ['k_advent', { pid: ids.Elias }],
+      ['a_delivery', { p_id: '00000000-0000-0000-0000-000000000000', p_status: 'geliefert' }], ['http_post', { url: 'https://example.invalid' }]]) {
+      const r = await api.post('/rest/v1/rpc/' + f, { data: a }); if (r.status() < 400) bad.push(`${f} aufrufbar (${r.status()})`);
+    }
+    expect(bad.length === 0, bad.join(' · '));
+  });
+  await S('Rechte: Kollege sieht nur die eigene Lieferung, k_delivery liefert kein Büro und keine Artikel', async () => {
+    const r = await call('k_delivery', { p_token: tok.Frieda });
+    eq(Object.keys(r || {}).sort().join(','), 'created_at,id,rating,status,tip,total_cents', 'Felder');
+    const e = await call('k_delivery', { p_token: tok.Hilde }); eq(e, null, 'Lieferung für Hilde (hat keine)');
+  });
+  await S('Aufräumen: offene Lieferung nach 2 Tagen ohne Büro/Artikel, Lieferungen nach 30 Tagen gelöscht', async () => {
+    const r = await call('k_deliver', { p_token: tok.Hilde, p_items: [{ id: prod['E-Riegel'], qty: 3 }], p_office: 'Keller' });
+    expect(r.ok, 'Bestellung Hilde: ' + JSON.stringify(r));
+    await sql(`update deliveries set created_at = now() - interval '3 days' where id = '${r.id}'`);
+    await must('a_cleanup', {});
+    let d = (await db('deliveries', 'office,items,status', 'id', r.id))[0];
+    eq(J(d), J({ office: null, items: null, status: 'neu' }), 'nach 3 Tagen');
+    await sql(`update deliveries set created_at = now() - interval '31 days' where id = '${r.id}'`);
+    await must('a_cleanup', {});
+    eq((await db('deliveries', 'id', 'id', r.id)).length, 0, 'nach 31 Tagen');
+  });
+
+  /* ---------- Adventskalender ---------- */
+  const mhd = async list => { await sql(`delete from purchase_items where purchase_id is null; ` + list.map(([n, d]) => `insert into purchase_items(purchase_id, product_id, qty, cents, mhd) values (null, '${prod[n]}', 1, 0, '${isoDay(d)}');`).join(' ')); };
+  const kauf = async who => call('k_buy', { p_token: tok[who], p_product: prod['E-Riegel'], p_qty: 1 });
+  const zeitraum = async (von, bis) => { await setS('advent_von', isoDay(von)); await setS('advent_bis', isoDay(bis)); await sql(`delete from advent_wins`); };
+  await S('Außerhalb des Zeitraums: Kauf liefert „advent“ leer, kein Gewinn', async () => {
+    await zeitraum(5, 25);
+    const r = await kauf('Frieda');
+    eq(J(r), J({ ok: true, advent: null }), 'Antwort');
+  });
+  await S('Gewinn: nur vorrätige Produkte bis 0,30 € mit Haltbarkeit bis advent_mhd_bis, frühestes Datum zuerst', async () => {
+    await zeitraum(-1, 19);   // Mitte liegt in 9 Tagen
+    await setS('advent_mhd_bis', isoDay(20));
+    await mhd([['E-Bonbon', 10], ['E-Frueh', 4], ['E-Teuer', 1], ['E-Spaet', 25]]);   // Teuer zu teuer, Spaet nach dem Stichtag
+    const s0 = await stock('E-Frueh');
+    const r = await kauf('Frieda');
+    eq(J(r.advent), J({ tag: 2, gewonnen: true, produkt: 'E-Frueh' }), 'Gewinn (Teuer 0,50 € zu teuer, Spaet nach Stichtag, Frueh vor Bonbon)');
+    eq(await stock('E-Frueh'), s0 - 1, 'Bestand E-Frueh');
+    const v = (await db('sales', 'qty,cents,kind', 'product_id', prod['E-Frueh'])).filter(x => x.kind === 'verlust');
+    eq(J(v), J([{ qty: 1, cents: 12, kind: 'verlust' }]), 'Verlustbuchung zum Einkaufspreis');
+    expect((await db('alerts', 'text')).some(a => a.text === 'Adventskalender: Frieda hat heute E-Frueh gewonnen'), 'Hinweis an den Verwalter fehlt');
+  });
+  await S('Höchstens ein Gewinn pro Tag; Bon zeigt „Adventskalender: Heute Frieda gewinnt E-Frueh“', async () => {
+    const r = await kauf('Gustav');
+    eq(J(r.advent), J({ tag: 2, gewonnen: false }), 'zweiter Käufer am Tag');
+    await reload();
+    await lnIs(page, 'Heute', 'Frieda gewinnt E-Frueh');
+    await lnIs(page, 'Gewinne bisher', '1');
+  });
+  await K('Kollege: Fenster „Türchen 2“ mit Spruch, einmal pro Tag und Gerät; beim nächsten Kauf nicht noch einmal', async () => {
+    await kReload(); await hideToast(kp);
+    await kp.locator('button.it', { hasText: 'E-Riegel' }).first().click(); await anzahl(kp, 'E-Riegel', 1);
+    await kp.locator('#modal:not([hidden]) h2', { hasText: 'Adventskalender, Türchen 2' }).waitFor();
+    const txt = await kp.locator('#modal').innerText();
+    expect(/Morgen öffnet sich das nächste Türchen\./.test(txt) && !/Gewonnen/.test(txt), 'Fenster: ' + txt.replace(/\s+/g, ' '));
+    await kp.locator('#modal [data-a="m-close"]').click(); await idle(kp);
+    eq(await kp.evaluate(() => localStorage.getItem('kadvent')), isoDay(0), 'gemerkter Tag');
+    await hideToast(kp);
+    await kp.locator('button.it', { hasText: 'E-Riegel' }).first().click(); await anzahl(kp, 'E-Riegel', 1);
+    await toast(kp, /angeschrieben/); await idle(kp);
+    eq(await kp.locator('#modal:not([hidden])').count(), 0, 'Fenster beim zweiten Kauf');
+  });
+  await K('Kollege: Gewinn zeigt „Gewonnen!“ mit Produkt (auch über den Lieferkorb)', async () => {
+    await sql(`delete from advent_wins`);
+    await kp.locator('[data-a="k-cart"]').click();
+    await inKorb('E-Riegel', 3);
+    await bestellen('Raum 3.14');
+    await kp.locator('#modal:not([hidden]) h2', { hasText: 'Türchen 2' }).waitFor();
+    const txt = (await kp.locator('#modal').innerText()).replace(/\s+/g, ' ');
+    expect(txt.includes('Gewonnen!') && txt.includes('Nimm dir am Kiosk ein E-Frueh kostenlos mit.'), 'Fenster: ' + txt);
+    await kp.locator('#modal [data-a="m-close"]').click(); await idle(kp);
+    await adminDel('geliefert');
+  });
+  await S('Zweiter Gewinn derselben Person erst ab der Mitte des Zeitraums, höchstens zwei', async () => {
+    await sql(`delete from advent_wins; insert into advent_wins(day, person_id) values ('${isoDay(-1)}', '${ids.Hilde}')`);
+    let r = await kauf('Hilde');
+    eq(r.advent.gewonnen, false, 'Hilde vor der Mitte (hat schon 1)');
+    r = await kauf('Ida');
+    eq(r.advent.gewonnen, true, 'Ida (noch kein Gewinn) gewinnt danach am selben Tag');
+    await zeitraum(-15, 5);   // Mitte vor 5 Tagen
+    await sql(`insert into advent_wins(day, person_id) values ('${isoDay(-1)}', '${ids.Hilde}')`);
+    r = await kauf('Hilde');
+    eq(r.advent.gewonnen, true, 'Hilde nach der Mitte (hat 1)');
+    await sql(`delete from advent_wins where day = '${isoDay(0)}'; insert into advent_wins(day, person_id) values ('${isoDay(-2)}', '${ids.Hilde}')`);
+    r = await kauf('Hilde');
+    eq(r.advent.gewonnen, false, 'Hilde mit schon 2 Gewinnen');
+  });
+  await S('Gleichzeitige Käufe am selben Tag: genau ein Gewinner, Gewinn nur einmal abgebucht', async () => {
+    await zeitraum(-1, 19);
+    await sql(`update products set stock = 3 where id in ('${prod['E-Frueh']}', '${prod['E-Bonbon']}')`);
+    const who = ['Frieda', 'Gustav', 'Ida', 'Elias'];
+    tok.Elias = await kp.evaluate(() => localStorage.getItem('ktoken'));
+    const rs = await Promise.all([...who, ...who].map(w => kauf(w)));
+    const wins = rs.filter(r => r.advent && r.advent.gewonnen).length;
+    const rows = (await db('advent_wins', 'day')).filter(x => x.day === isoDay(0)).length;
+    eq(`${wins}/${rows}/${3 - await stock('E-Frueh')}/${3 - await stock('E-Bonbon')}`, '1/1/1/0', 'Gewinner / Einträge heute / abgebuchte Gewinne E-Frueh / E-Bonbon');
+  });
+  await S('Kein passendes Produkt vorrätig: kein Gewinn, kein Fehler', async () => {
+    await sql(`delete from advent_wins; delete from purchase_items where purchase_id is null`);
+    const r = await kauf('Gustav');
+    eq(J(r.advent), J({ tag: 2, gewonnen: false }), 'Antwort');
+  });
+  await S('Aufräumen: Adventszeitraum zurück auf Dezember; keine Fehler in der Browser-Konsole', async () => {
+    await setS('advent_von', '2026-12-01'); await setS('advent_bis', '2026-12-24'); await setS('advent_mhd_bis', '2027-02-28');
+    await sql(`delete from advent_wins; delete from purchase_items where purchase_id is null`);
+    for (const t of Object.values(tok)) await call('k_logout', { p_token: t });
+    await api.dispose();
+    const real = [...page.problems, ...kp.problems].filter(p => !/favicon/i.test(p));
+    expect(real.length === 0, real.join(' · '));
+  });
+  await kp.context().close();
+  await page.context().close();
+};

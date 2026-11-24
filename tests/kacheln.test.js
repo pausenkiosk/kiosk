@@ -90,7 +90,7 @@ module.exports = async function kacheln(browser) {
   await K('Langer Name höchstens 2 Zeilen; HTML im Namen wird als Text gezeigt und nicht ausgeführt', async () => {
     const h = await kachel('Corny Big Chocolate').locator('.tn').evaluate(e => ({ h: e.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(e).lineHeight) || parseFloat(getComputedStyle(e).fontSize) * 1.15 }));
     expect(h.h <= h.lh * 2 + 1, `Name ist ${Math.round(h.h)} px hoch, erlaubt ${Math.round(h.lh * 2)} px`);
-    eq(await kp.locator('#app img').count(), 0, 'eingeschleuste Bilder');
+    eq(await kp.locator('#app img:not([src^="img/"])').count(), 0, 'eingeschleuste Bilder');
     expect(await kp.evaluate(() => window.__x) === undefined, 'eingeschleuster Code wurde ausgeführt');
     eq(await kachel('Keks').locator('.tn').innerText(), HTML, 'angezeigter Name');
   });
@@ -215,17 +215,41 @@ module.exports = async function kacheln(browser) {
   });
   await K('Bilder: Form passt zum Produkt (Stichwort nur am Wortanfang, z. B. Corny … Chocolate ist keine Cola-Dose)', async () => {
     const r = await kp.evaluate(([list, F]) => list.map(([name, cat, want]) => {
-      const svg = productIcon({ name, cat }); const got = Object.keys(F).find(k => svg.includes(F[k])) || '?';
+      const svg = productIcon({ name, cat }); const got = svg.startsWith('<img') ? want : Object.keys(F).find(k => svg.includes(F[k])) || '?';   // mit Foto: Zeichnung nicht maßgeblich
       return { name, want, got };
     }), [ERWARTET, FORM]);
     const bad = r.filter(x => x.got !== x.want).map(x => `${x.name}: erwartet ${x.want}, gezeichnet ${x.got}`);
     expect(bad.length === 0, bad.join(' · '));
   });
   await K('Bilder: jedes Produkt im Testprojekt bekommt ein Bild ohne Text, Logo oder Verweis nach außen', async () => {
-    const r = await kp.evaluate(() => [...document.querySelectorAll('.tile')].map(t => { const s = t.querySelector('svg');
-      return { n: t.querySelector('.tn').textContent, ok: !!s && !s.querySelector('text,image,use,a,foreignObject') && !/href|url\(/.test(s.outerHTML) && s.getAttribute('aria-hidden') === 'true' }; }));
+    const r = await kp.evaluate(() => [...document.querySelectorAll('.tile')].map(t => { const s = t.querySelector('svg'), i = t.querySelector('img');
+      return { n: t.querySelector('.tn').textContent, ok: i ? /^img\/[\w.%-]+\.jpg$/.test(i.getAttribute('src')) : !!s && !s.querySelector('text,image,use,a,foreignObject') && !/href|url\(/.test(s.outerHTML) && s.getAttribute('aria-hidden') === 'true' }; }));
     const bad = r.filter(x => !x.ok).map(x => x.n);
     expect(r.length >= 5 && bad.length === 0, 'Ohne passendes Bild: ' + bad.join(', ') + ' (geprüft: ' + r.length + ')');
+  });
+  await K('Produktfotos (ab v31): bekannter Name → Foto von der eigenen Seite, unbekannter Name → Zeichnung; Kacheln gleich hoch', async () => {
+    const hatFotos = await kp.evaluate(() => !!window.PRODUCT_IMAGES);
+    if (!hatFotos) return;   // Fassung ohne Fotos
+    const r = await kp.evaluate(async () => {
+      const tiles = [...document.querySelectorAll('.tile')].map(t => ({ n: t.querySelector('.tn').textContent, img: t.querySelector('img'), svg: !!t.querySelector('svg') }));
+      for (const t of tiles) if (t.img && !t.img.complete) await new Promise(r => { t.img.onload = t.img.onerror = r; setTimeout(r, 4000); });
+      return tiles.map(t => ({ n: t.n, img: t.img ? { src: t.img.getAttribute('src'), ok: t.img.naturalWidth > 0, alt: t.img.getAttribute('alt'), w: Math.round(t.img.getBoundingClientRect().width) } : null, svg: t.svg,
+        soll: (window.PRODUCT_IMAGES || {})[t.n] || null }));
+    });
+    const bad = [];
+    for (const t of r) {
+      if (t.soll && !(t.img && t.img.src === 'img/' + encodeURI(t.soll) && t.img.ok && t.img.alt === '')) bad.push(`${t.n}: Foto fehlt oder lädt nicht (${JSON.stringify(t.img)})`);
+      if (!t.soll && !(t.svg && !t.img)) bad.push(`${t.n}: keine Zeichnung als Ersatz`);
+    }
+    const cola = r.find(t => t.n === 'Cola');
+    expect(cola && cola.img, 'Testprodukt „Cola“ zeigt kein Foto');
+    const hs = await kp.evaluate(() => [...document.querySelectorAll('.tiles')].map(g => [...new Set([...g.querySelectorAll('.tile')].map(t => Math.round(t.getBoundingClientRect().height)))].length));
+    expect(hs.every(n => n === 1), 'Gruppen mit unterschiedlich hohen Kacheln: ' + hs.join(','));
+    expect(bad.length === 0, bad.join(' · '));
+  });
+  await K('Produktfotos: kein Foto für ähnliche, aber andere Namen (nur exakter Name)', async () => {
+    const r = await kp.evaluate(() => ['cola', 'Cola ', 'Coca-Cola', 'Twix White', 'Snickers Ice'].map(n => n + ':' + (productIcon({ name: n, cat: 'Süßes' }).startsWith('<img') ? 'Foto' : 'Zeichnung')));
+    eq(r.join(' | '), 'cola:Zeichnung | Cola :Zeichnung | Coca-Cola:Zeichnung | Twix White:Zeichnung | Snickers Ice:Zeichnung', 'Bildart');
   });
   await K('Keine externen Ladevorgänge, keine Fehler in der Browser-Konsole', async () => {
     const real = [...page.problems, ...kp.problems].filter(p => !/favicon/i.test(p));
