@@ -82,7 +82,7 @@ async function hideToast(page) { await page.evaluate(() => { const t = document.
 
 async function closeModal(page) {
   if (await page.locator('#modal:not([hidden])').count()) {
-    await page.evaluate(() => { const b = document.querySelector('#modal [data-a="m-x"], #modal [data-a="m-close"]'); if (b) b.click(); });
+    await page.evaluate(() => { const b = document.querySelector('#modal [data-a="m-x"], #modal [data-a="m-close"], #modal [data-q="x"]'); if (b) b.click(); });
   }
 }
 
@@ -116,6 +116,32 @@ async function listSaldo(page, name) {
   const [txt, cls] = [(await cell.innerText()).trim(), (await cell.getAttribute('class')) || ''];
   const n = Math.round(Number(txt.replace(/Guthaben|[−-]/g, '').trim().replace(/\./g, '').replace(',', '.')) * 100);
   return /Guthaben/.test(txt) || /\bpos\b/.test(cls) ? -n : n;
+}
+
+/* Anzahl beim Anschreiben wählen und bestätigen (ok = false: abbrechen). Bis v28 Auswahlliste, ab v29 fünf Knöpfe. */
+async function anzahl(page, title, qty, ok = true) {
+  const m = page.locator('#modal:not([hidden])');
+  await m.locator('h2', { hasText: title }).first().waitFor();
+  if (await m.locator('#f_qty').count()) return ok ? fillModal(page, title, { qty }) : m.locator('[data-a="m-x"]').click();
+  if (!ok) return m.locator('[data-q="x"]').click();
+  await m.locator(`[data-q="${qty}"]`).click();
+  await m.locator('[data-q="ok"]').click();
+}
+
+/* Betrag „Zusammen“ im Anzahl-Dialog (ab v29) */
+async function zusammen(page, expected) {
+  try { await page.waitForFunction(ex => [...document.querySelectorAll('#modal .ln')].some(l => l.children[0].textContent.includes('Zusammen') && l.children[1].textContent.trim() === ex), expected); }
+  catch { const now = await page.evaluate(() => { const l = [...document.querySelectorAll('#modal .ln')].find(x => x.textContent.includes('Zusammen')); return l ? l.children[1].textContent.trim() : '(fehlt)'; });
+    throw new Error(`„Zusammen“ im Dialog: erwartet „${expected}“, tatsächlich „${now}“`); }
+}
+
+/* Bon-Zeile „Abgleich Ware/Kasse“ (ab v29) bzw. „Fehlbetrag letzte Zählung“ (bis v28).
+   alt/neu: erwarteter Betrag in Cent (positiv = es fehlt etwas) oder null (nichts zu vergleichen). */
+async function abgleich(page, alt, neu = alt) {
+  const nl = await page.locator('#app .ln', { hasText: 'Abgleich Ware/Kasse' }).count();
+  const e = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (nl) return lnIs(page, 'Abgleich Ware/Kasse', neu === null ? 'vor dem Kassensturz zählen' : neu > 0 ? 'fehlen ' + e(neu) : neu < 0 ? 'mehr in der Kasse ' + e(-neu) : 'stimmt');
+  return lnIs(page, 'Fehlbetrag letzte Zählung', alt === null ? '–' : e(alt));
 }
 
 /* Wartet, bis irgendwo in der App ein Text steht. */
@@ -196,4 +222,4 @@ function summary() {
   return bad.length;
 }
 
-module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, loggedOut, pickName, listSaldo, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };
+module.exports = { CFG, ECHT, step, setGroup, expect, eq, launch, idle, newPage, toast, hideToast, closeModal, fillModal, loggedOut, pickName, listSaldo, anzahl, zusammen, abgleich, see, row, prow, rowText, rowHas, lnValue, lnIs, anonApi, sql, isoDay, summary, results };

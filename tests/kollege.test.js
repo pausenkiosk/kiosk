@@ -1,6 +1,6 @@
 'use strict';
 /* Kollegen-Ansicht: QR-Link, Anmeldung mit PIN, Sperre, Einwilligung, Anschreiben, Rückgängig, PIN ändern. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, fillModal, loggedOut, pickName, see, rowHas, rowText, lnIs } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, fillModal, anzahl, zusammen, loggedOut, pickName, see, rowHas, rowText, lnIs } = require('./lib');
 
 const KURL = () => `${CFG.url}?k=${encodeURIComponent(CFG.code)}`;
 
@@ -91,14 +91,23 @@ module.exports = async function kollege(browser) {
   });
   await step_('Anschreiben: Abbrechen bucht nichts', async () => {
     await page.locator('button.it', { hasText: 'Cola' }).click();
-    await page.locator('#modal [data-a="m-x"]').click();
+    await anzahl(page, 'Cola', 1, false);
     await lnIs(page, 'OFFEN', '0,00 €');
   });
   await step_('Anschreiben: 2 × Cola erhöht den offenen Betrag und senkt den Bestand', async () => {
     await page.locator('button.it', { hasText: 'Cola' }).click();
-    const opts = await page.locator('#modal #f_qty option').allInnerTexts();
-    eq(opts[1], '2 × = 3,00 €', 'Auswahltext für 2 Stück');
-    await fillModal(page, 'Cola', { qty: 2 });
+    if (await page.locator('#modal #f_qty').count()) eq((await page.locator('#modal #f_qty option').allInnerTexts())[1], '2 × = 3,00 €', 'Auswahltext für 2 Stück');
+    else {   // ab v29: fünf Knöpfe, 1 vorgewählt, „Zusammen“ rechnet mit
+      const m = page.locator('#modal:not([hidden])');
+      eq((await m.locator('[data-q]').evaluateAll(bs => bs.map(b => b.dataset.q))).join(','), '1,2,3,4,5,x,ok', 'Knöpfe im Dialog');
+      eq(await m.locator('[data-q="1"]').getAttribute('aria-pressed'), 'true', '1 vorgewählt');
+      await see(page, 'Wie viele? Je 1,50 €', '#modal');
+      await zusammen(page, '1,50 €');
+      await m.locator('[data-q="2"]').click();
+      await zusammen(page, '3,00 €');
+      eq(`${await m.locator('[data-q="2"]').getAttribute('aria-pressed')}/${await m.locator('[data-q="1"]').getAttribute('aria-pressed')}`, 'true/false', 'Markierung nach Wahl von 2');
+    }
+    await anzahl(page, 'Cola', 2);
     await toast(page, /Cola angeschrieben\. 5 Minuten lang rückgängig möglich\./);
     await lnIs(page, 'OFFEN', '3,00 €');
     await rowHas(page, 'Cola', /10 St/);
@@ -115,7 +124,7 @@ module.exports = async function kollege(browser) {
   await step_('Anschreiben: 1 × Wasser bleibt stehen', async () => {
     await hideToast(page);
     await page.locator('button.it', { hasText: 'Wasser' }).click();
-    await fillModal(page, 'Wasser', { qty: 1 });
+    await anzahl(page, 'Wasser', 1);
     await toast(page, /Wasser angeschrieben/);
     await lnIs(page, 'OFFEN', '0,80 €');
     await rowHas(page, 'Wasser', /19 St/);

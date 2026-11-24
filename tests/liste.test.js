@@ -2,7 +2,7 @@
 /* Francos Wünsche (ab app.js v23):
    1. Personenliste der Verwaltung: Schulden rot mit Minus, Guthaben grün, Knöpfe in eigener Zeile.
    2. Erste Seite: „Läuft als Nächstes ab“ – die drei nächsten Haltbarkeitsdaten, auch wenn es noch lange hin ist. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, pickName, see, prow, anonApi, isoDay } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, anzahl, pickName, see, prow, anonApi, isoDay } = require('./lib');
 
 module.exports = async function liste(browser) {
   setGroup('Personenliste und nächste Abläufe');
@@ -137,7 +137,7 @@ module.exports = async function liste(browser) {
     const stueck = Math.floor(1200 / p.cents) + 1;                     // so viele, dass das Guthaben von 12,00 gerade überschritten ist
     let rest = stueck;
     while (rest > 0) { const q = Math.min(5, rest); await idle(kp); await hideToast(kp);
-      await kp.locator('button.it', { hasText: p.name }).first().click(); await fillModal(kp, p.name, { qty: q }); await toast(kp, /angeschrieben/); rest -= q; }
+      await kp.locator('button.it', { hasText: p.name }).first().click(); await anzahl(kp, p.name, q); await toast(kp, /angeschrieben/); rest -= q; }
     await idle(kp);
     const offen = stueck * p.cents - 1200;
     eq(JSON.stringify(await kFeld()), JSON.stringify({ label: 'OFFEN', text: '−' + (offen / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 }) + ' €', farbe: 'rot' }), `Anzeige nach ${stueck} × ${p.name}`);

@@ -43,6 +43,7 @@ Vorher muss `db/schema.sql` einmal ins Testprojekt eingespielt sein – in der F
 | `anmeldung.test.js` | Kollegen-Anmeldemaske: gemerkter Name, Suche ab 13 Personen, Anleitung für den Startbildschirm, Kiosk-Code in der Adresse |
 | `liste.test.js` | Personenliste (Schulden rot mit Minus, Guthaben grün, Umbruch am Handy) und „Läuft als Nächstes ab“ auf der ersten Seite |
 | `sichtbar.test.js` | Kollegen sehen nur Produkte mit Bestand; „PIN ändern“ mit Wiederholung der neuen PIN |
+| `kacheln.test.js` | Kachel-Ansicht der Kollegen: Umschalter und Merken, Anschreiben, Tastatur, Handy-Breiten, Produktbilder |
 | `uebergang.test.js` | (nur auf Wunsch, für den Wechsel von v14 auf Ausbaustufe 3) bisherige App-Fassung gegen die neue Datenbank: Buchung von Hand, Einkauf, Zahlung, Kassensturz |
 | `grenzen.test.js` | Summen und Sicherung bei mehr als 1000 Buchungen |
 | `verwaltung-mock.js` | (nicht von `run.sh` gestartet) Bildschirmfotos der Verwalter-Ansichten mit erfundenen Daten ohne Datenbank |

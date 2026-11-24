@@ -1,7 +1,7 @@
 'use strict';
 /* Guthaben aufladen (Ausbaustufe 4). Zwei Browser: Verwalter und Kollege „Karl“, dazu „Lena“ für Gegenproben.
    Eigene Testprodukte (1,20 / 1,00 / 0,50) und eigene Personen, damit der Teil für sich allein rechnet. */
-const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, listSaldo, pickName, see, prow, rowHas, lnIs, lnValue, anonApi } = require('./lib');
+const { CFG, step, setGroup, expect, eq, newPage, toast, hideToast, idle, fillModal, anzahl, listSaldo, pickName, see, prow, rowHas, lnIs, lnValue, anonApi } = require('./lib');
 
 const eur = c => (c / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NIL = '00000000-0000-0000-0000-000000000000';
@@ -40,7 +40,7 @@ module.exports = async function guthaben(browser) {
   const kauf = async (name, qty) => {
     await idle(kp); await hideToast(kp);
     await kp.locator('button.it', { hasText: name }).click();
-    await fillModal(kp, name, { qty });
+    await anzahl(kp, name, qty);
     await toast(kp, new RegExp(name + ' angeschrieben'));
     await idle(kp);
   };

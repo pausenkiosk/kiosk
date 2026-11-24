@@ -136,7 +136,7 @@ module.exports = async function uebertrag(browser) {
     for (const x of ['4711', '7,50', '']) eq(await mehr('Wanda', null, x), 'Bitte zuerst eine Aktion wählen.', `Hinweis bei „${x}“ ohne Auswahl`);
     eq(await saldo('Wanda'), before, 'Saldo Wanda');
   });
-  await S('Übertrag ab 100,00 € fragt nach; Abbrechen bucht nichts, Bestätigen bucht (ab v26)', async () => {
+  await S('Übertrag ab 20,00 € fragt nach; Abbrechen bucht nichts, Bestätigen bucht (ab v26)', async () => {
     const before = await saldo('Wanda');
     const hoch = async (aktion, betrag, bestaetigen) => {
       await idle(page); await hideToast(page);
@@ -149,14 +149,14 @@ module.exports = async function uebertrag(browser) {
       await idle(page);
       return txt;
     };
-    const dlg = await hoch('schuld', '100', false);
-    expect(/100,00 € Schulden für Wanda\?/i.test(dlg) && dlg.includes('ungewöhnlich hoher Betrag'), 'Rückfrage: ' + dlg);
+    const dlg = await hoch('schuld', '20', false);
+    expect(/20,00 € Schulden für Wanda\?/i.test(dlg) && dlg.includes('ungewöhnlich hoher Betrag'), 'Rückfrage: ' + dlg);
     eq(await saldo('Wanda'), before, 'Saldo nach Abbrechen');
     await hoch('guthaben', '250,00', false);
     eq(await saldo('Wanda'), before, 'Saldo nach Abbrechen (Guthaben)');
-    eq(await mehr('Wanda', 'schuld', '99,99'), '99,99 € Schulden für Wanda eingetragen.', 'Hinweis knapp unter der Grenze (ohne Rückfrage)');
-    await hoch('guthaben', '100', true);
-    eq(await saldo('Wanda'), before + 9999 - 10000, 'Saldo nach 99,99 Schulden und bestätigten 100,00 Guthaben');
+    eq(await mehr('Wanda', 'schuld', '19,99'), '19,99 € Schulden für Wanda eingetragen.', 'Hinweis knapp unter der Grenze (ohne Rückfrage)');
+    await hoch('guthaben', '20', true);
+    eq(await saldo('Wanda'), before + 1999 - 2000, 'Saldo nach 19,99 Schulden und bestätigten 20,00 Guthaben');
     await rpc('a_fix', { p_person: ids.Wanda, p_cents: 1 });   // wieder auf den Stand davor
   });
   await K('Deine Buchungen: Beträge ohne Vorzeichen, Gutschriften grün, Schulden-Buchungen nicht (ab v26)', async () => {
