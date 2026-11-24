@@ -31,3 +31,4 @@ Produktfotos von Open Food Facts stehen unter CC BY-SA 3.0 (https://creativecomm
 | Vitaminwasser Himbeer-Granatapfel | eigenes Foto aus dem Kiosk | – |
 | Monster Energy Zero | eigenes Foto aus dem Kiosk | – |
 | Knoppers Himbeer-Joghurt | eigenes Foto aus dem Kiosk | – |
+| Choceur Peanut Bits | eigenes Foto aus dem Kiosk | – |

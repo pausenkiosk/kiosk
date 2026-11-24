@@ -38,7 +38,7 @@ insert into settings values ('advent_von', '2026-12-01') on conflict do nothing;
 insert into settings values ('advent_bis', '2026-12-24') on conflict do nothing;
 -- Gewinnliste: Namensmuster (% = beliebig) mit Gewicht. Knoppers 40 %, Corny Big Banane 35 % (andere Corny-Big-Sorten
 -- halten länger und werden verkauft).
-insert into settings values ('advent_pool', '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":6},{"match":"Kinder Country%","w":5}]') on conflict do nothing;
+insert into settings values ('advent_pool', '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":6},{"match":"Kinder Country%","w":5}]') on conflict do nothing;
 
 -- Benachrichtigung an den Betreiber über ntfy (nur wenn ein Kanal eingerichtet ist). Text ohne Namen.
 create or replace function k_notify(p_title text, p_body text) returns void
@@ -70,7 +70,8 @@ end $$;
 -- Regeln: höchstens ein Gewinn pro Tag, höchstens 2 pro Person; wer noch nie gewonnen hat, gewinnt zuerst,
 -- ein zweiter Gewinn erst ab der zweiten Hälfte des Zeitraums. Gewinn: aus der Gewinnliste advent_pool
 -- (Namensmuster mit Gewichten); erst wird eine vorrätige Gruppe nach Gewicht gezogen, darin das Produkt mit dem
--- frühesten Haltbarkeitsdatum. Abgelaufenes ist ausgeschlossen. Wird als Verlust zum Einkaufspreis gebucht.
+-- frühesten Haltbarkeitsdatum. Abgelaufenes ist ausgeschlossen. Auch ausgeblendete Produkte mit Bestand können
+-- gewinnen (reine Gewinn-Ware). Wird als Verlust zum Einkaufspreis gebucht. Ohne Kauf an einem Tag verfällt der Gewinn.
 create or replace function k_advent(pid uuid) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare von date; bis date; wins int; pr products; mitte date; r numeric; gm text;
@@ -88,13 +89,13 @@ begin
     select e->>'match' m, (e->>'w')::numeric w
       from jsonb_array_elements(coalesce((select value::jsonb from settings where key = 'advent_pool'), '[]'::jsonb)) e
      where (e->>'w')::numeric > 0
-       and exists (select 1 from products p where p.name ilike e->>'match' and p.active and p.stock > 0
+       and exists (select 1 from products p where p.name ilike e->>'match' and p.stock > 0
                    and not exists (select 1 from purchase_items i where i.product_id = p.id and not i.mhd_done and i.mhd < today()))),
   c as (select m, sum(w) over (order by m) cw, sum(w) over () tw from g)
   select m into gm from c where cw >= r * tw order by cw limit 1;
   if gm is null then return jsonb_build_object('tag', today() - von + 1, 'gewonnen', false); end if;
   select p.* into pr from products p
-   where p.name ilike gm and p.active and p.stock > 0
+   where p.name ilike gm and p.stock > 0
      and not exists (select 1 from purchase_items i where i.product_id = p.id and not i.mhd_done and i.mhd < today())
    order by (select min(i.mhd) from purchase_items i where i.product_id = p.id and not i.mhd_done) nulls last, p.name
    limit 1 for update;
