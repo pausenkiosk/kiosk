@@ -38,7 +38,7 @@ insert into settings values ('advent_von', '2026-12-01') on conflict do nothing;
 insert into settings values ('advent_bis', '2026-12-24') on conflict do nothing;
 -- Gewinnliste: Namensmuster (% = beliebig) mit Gewicht. Knoppers 40 %, Corny Big Banane 35 % (andere Corny-Big-Sorten
 -- halten länger und werden verkauft).
-insert into settings values ('advent_pool', '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":11}]') on conflict do nothing;
+insert into settings values ('advent_pool', '[{"match":"Knoppers%","w":40},{"match":"Corny Big%Banane%","w":35},{"match":"Choceur Peanut%","w":8},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":8},{"match":"Choceur Milk%","w":8}]') on conflict do nothing;
 
 -- Benachrichtigung an den Betreiber über ntfy (nur wenn ein Kanal eingerichtet ist). Text ohne Namen.
 create or replace function k_notify(p_title text, p_body text) returns void
