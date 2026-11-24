@@ -96,7 +96,7 @@ module.exports = async function kasse(browser) {
   });
   await S('Zahlung, dann Kassensturz am selben Tag: Zahlung wird abgezogen', async () => {
     await pay('Gerd', '1,00'); plus += 100;
-    eq(await sturz('4,00'), 'Gebucht: 3,00 € Barverkäufe, 1,00 € waren Schuldschein-Zahlungen.', 'Hinweis');
+    eq(await sturz('4,00'), 'Gebucht: 3,00 € Barverkäufe, 1,00 € waren Einzahlungen.', 'Hinweis');
     const c = await last();
     eq(`${c.cents}/${c.bar_cents}`, '400/300', 'Kassensturz (Inhalt/bar)');
     eq((await barRow(c.id)).in_cents, 300, 'Kassenbuch Barverkäufe');
@@ -104,7 +104,7 @@ module.exports = async function kasse(browser) {
   });
   await S('Zahlung vor dem früheren Kassensturz zählt nicht noch einmal, Zahlung danach schon', async () => {
     await pay('Gerd', '2,00'); plus += 200;
-    eq(await sturz('10,00'), 'Gebucht: 8,00 € Barverkäufe, 2,00 € waren Schuldschein-Zahlungen.', 'Hinweis');
+    eq(await sturz('10,00'), 'Gebucht: 8,00 € Barverkäufe, 2,00 € waren Einzahlungen.', 'Hinweis');
     const c = await last();
     eq(`${c.cents}/${c.bar_cents}`, '1000/800', 'Kassensturz (Inhalt/bar)');
     plus += 800; await standIs();
@@ -152,7 +152,7 @@ module.exports = async function kasse(browser) {
     const r = await rpc('a_count', { p_items: [{ id: wasser.id, qty: wasser.stock - 1 }] });
     expect(!r.error, 'Zählung: ' + r.error);
     await pay('Gerd', '1,50'); plus += 150;
-    eq(await sturz('6,00'), 'Gebucht: 3,80 € Barverkäufe, 2,20 € waren Schuldschein-Zahlungen.', 'Hinweis');
+    eq(await sturz('6,00'), 'Gebucht: 3,80 € Barverkäufe, 2,20 € waren Einzahlungen.', 'Hinweis');
     const c = await last();
     eq(`${c.day}/${c.cents}/${c.bar_cents}`, `${isoDay()}/600/380`, 'Kassensturz (Tag/Inhalt/bar)');
     plus += 380; await standIs();
@@ -200,7 +200,7 @@ module.exports = async function kasse(browser) {
     eq((await db('journal', 'id', 'kind', 'zahlung')).length, 5, 'Zahlungen bleiben erhalten');
   });
   await S('Nach dem Storno zählen die Zahlungen wieder für den nächsten Kassensturz', async () => {
-    eq(await sturz('6,00'), 'Gebucht: 3,80 € Barverkäufe, 2,20 € waren Schuldschein-Zahlungen.', 'Hinweis');
+    eq(await sturz('6,00'), 'Gebucht: 3,80 € Barverkäufe, 2,20 € waren Einzahlungen.', 'Hinweis');
     plus += 380; await standIs();
   });
   await S('Storno Kassensturz mit negativem Barverkauf (Zeile mit 0,00) geht ebenfalls', async () => {
@@ -282,7 +282,7 @@ module.exports = async function kasse(browser) {
     plus += 300;
     await page.reload(); await see(page, 'KASSENSTAND');
     await pay('Gerd', '2,00'); plus += 200;
-    eq(await sturz('10,00'), 'Gebucht: 8,00 € Barverkäufe, 2,00 € waren Schuldschein-Zahlungen.', 'Hinweis');
+    eq(await sturz('10,00'), 'Gebucht: 8,00 € Barverkäufe, 2,00 € waren Einzahlungen.', 'Hinweis');
     eq((await counts()).length, n + 2, 'Anzahl Kassenstürze');
     plus += 800; await standIs();
   });

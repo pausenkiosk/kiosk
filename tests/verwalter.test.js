@@ -709,7 +709,7 @@ module.exports = async function verwalter(browser) {
       document.querySelector('#app [data-a="a-cash"]').click();
       const t = document.querySelector('#toast'), hint = t.hidden ? '' : t.textContent, modalOpen = !document.querySelector('#modal').hidden;
       document.querySelector('#nav [data-t="leute"]').click();
-      return { wasBusy, hint, modalOpen, tab: document.querySelector('#nav .on').dataset.t, text: document.querySelector('#app h2').textContent };
+      return { wasBusy, hint, modalOpen, tab: document.querySelector('#nav .on').dataset.t, text: document.querySelector('#app h2').textContent.replace(/\s*i$/, '').trim() };
     });
     expect(r.wasBusy, 'Speichern war schon fertig, Prüfung nicht aussagekräftig');
     eq(r.hint, 'Einen Moment, die letzte Eingabe wird noch gespeichert …', 'Hinweis beim Tippen während des Speicherns');
@@ -822,6 +822,9 @@ module.exports = async function verwalter(browser) {
   const more = async (name, a, x) => {
     await idle(page); await hideToast(page);
     await prow(page, name).locator('[data-a="a-more"]').click();
+    await page.locator('#modal:not([hidden]) #f_a').waitFor();
+    // ab v21 gibt es statt „korrigieren (+ / −)“ die Auswahl Schulden/Guthaben übertragen (Betrag ohne Vorzeichen)
+    if (a === 'fix' && !(await page.locator('#modal #f_a option[value="fix"]').count())) { a = /^[-−]/.test(x) ? 'guthaben' : 'schuld'; x = x.replace(/^[-−]/, ''); }
     await fillModal(page, name, { a, x });
   };
   await S('Leute: neue PIN – braucht 4 Ziffern', async () => {
@@ -1016,6 +1019,7 @@ module.exports = async function verwalter(browser) {
     await hideToast(page);
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), act('a-backup')]);
     eq(dl.suggestedFilename(), `kiosk-sicherung-${isoDay()}.json`, 'Dateiname');
+    await toast(page, /Sicherung erstellt\./);
     const txt = require('fs').readFileSync(await dl.path(), 'utf8');
     const data = JSON.parse(txt);
     const want = ['products', 'sales', 'ledger', 'journal', 'purchases', 'purchase_items', 'counts', 'cash_counts', 'alerts', 'requests', 'persons', 'settings', 'erstellt'];
@@ -1027,7 +1031,6 @@ module.exports = async function verwalter(browser) {
     const codeNow = await setting('kiosk_code');
     expect(!/pin_hash|setup_code/.test(txt) && !data.settings.some(x => x.key === 'kiosk_code') && !txt.includes(CFG.code) && !txt.includes(codeNow), 'Sicherung enthält PIN-Prüfwert oder Kiosk-Code');
     expect(!/token_hash|encrypted_password/.test(txt), 'Sicherung enthält Sitzungs- oder Anmeldedaten');
-    await toast(page, /Sicherung erstellt\./);
   });
   await S('Sicherung: Bon zeigt das Datum der letzten Sicherung', async () => {
     await see(page, `Letzte heruntergeladene Sicherung: ${dshort(isoDay())} (heute).`);
@@ -1087,7 +1090,7 @@ module.exports = async function verwalter(browser) {
       { const { data, error } = await SB.from('products').update({ price_cents: 1 }).eq('name', 'Cola').select(); out.write['products ändern'] = error || !data.length ? 'gesperrt' : 'ERLAUBT'; }
       const nil = '00000000-0000-0000-0000-000000000000';
       const fns = { a_person: { p_vorname: 'Eindringling', p_pin: '0000' }, a_persons: { p_names: ['Eindringling'] }, a_pin: { p_person: nil, p_pin: '0000' }, a_person_delete: { p_person: nil },
-        a_pay: { p_person: nil, p_cents: 1 }, a_fix: { p_person: nil, p_cents: 1 }, a_cash: { p_cents: 1 }, a_cash_box: { p_cents: 1 }, a_count: { p_items: [] }, a_purchase: { p_day: '2020-01-01', p_store: 'x', p_items: [] }, a_waste: { p_product: nil, p_qty: 1 }, a_storno: { p_journal: nil } };
+        a_pay: { p_person: nil, p_cents: 1 }, a_fix: { p_person: nil, p_cents: 1 }, a_cash: { p_cents: 1 }, a_cash_box: { p_cents: 1 }, a_count: { p_items: [] }, a_purchase: { p_day: '2020-01-01', p_store: 'x', p_items: [] }, a_waste: { p_product: nil, p_qty: 1 }, a_storno: { p_journal: nil }, a_payout: { p_person: nil, p_cents: 1 } };
       for (const [f, a] of Object.entries(fns)) { const { error } = await SB.rpc(f, a); out.fn[f] = error ? error.message : 'ERLAUBT'; }
       { const { data } = await SB.storage.from('fotos').list('regal'); out.read.fotos = data ? data.length : 'gesperrt'; }
       { const { error } = await SB.storage.from('fotos').upload('regal/eindringling.jpg', new Blob(['x'], { type: 'image/jpeg' })); out.write.fotos = error ? 'gesperrt' : 'ERLAUBT'; }
