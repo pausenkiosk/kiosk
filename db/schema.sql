@@ -753,6 +753,7 @@ create or replace function k_advent(pid uuid) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare von date; bis date; wins int; pr products; mitte date; r numeric; gm text;
 begin
+  begin
   von := (select value::date from settings where key = 'advent_von');
   bis := (select value::date from settings where key = 'advent_bis');
   if von is null or today() < von or today() > bis then return null; end if;
@@ -784,6 +785,9 @@ begin
   -- Mitteilung ans Handy ohne Namen; wer gewonnen hat, steht auf der Startseite der Verwaltung
   perform k_notify('Adventskalender: heute gewonnen', 'Gewinn: ' || pr.name || '. Wer gewonnen hat, steht auf der Startseite der Kiosk-App.');
   return jsonb_build_object('tag', today() - von + 1, 'gewonnen', true, 'produkt', pr.name);
+  exception when others then
+    return null;  -- z. B. fehlerhafte Gewinnliste: dann heute kein Gewinn, der Kauf bleibt gültig
+  end;
 end $$;
 
 create or replace function k_buy(p_token text, p_product uuid, p_qty int) returns jsonb
@@ -824,6 +828,8 @@ begin
     total := total + c;
     lst := lst || jsonb_build_object('name', (select name from products where id = (it->>'id')::uuid), 'qty', (it->>'qty')::int);
   end loop;
+  -- kein Rückgängig für Lieferungen: alle Buchungen dieser Transaktion tragen ts = now()
+  update ledger set ts = null, sale_id = null where person_id = pid and kind = 'kauf' and ts = now();
   insert into deliveries(person_id, office, items, total_cents) values (pid, o, lst, total) returning id into did;
   perform k_notify('Kiosk-Express: neue Lieferung', 'Büro ' || o || ', ' || jsonb_array_length(lst) || ' Posten. Details in der Kiosk-App.');
   return jsonb_build_object('ok', true, 'id', did, 'summe', total, 'advent', k_advent(pid));
