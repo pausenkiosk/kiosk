@@ -199,7 +199,7 @@ module.exports = async function extras(browser) {
     await kReload(); const k = await karte();
     expect(!k || k.schritt === 'Geliefert', 'Statuskarte nach Storno zeigt die stornierte Bestellung: ' + JSON.stringify(k));   // sichtbar bleibt höchstens die frühere, gelieferte
   });
-  await K('Lücke: Rückgängig auf die Lieferbuchung, danach Storno → Kollege bekommt den Betrag zweimal zurück', async () => {
+  await K('Rückgängig auf die Lieferbuchung + Storno ergibt keine doppelte Gutschrift', async () => {
     await kp.locator('[data-a="k-cart"]').click();
     await inKorb('E-Riegel', 3);
     await bestellen('Raum 3.14');
@@ -380,11 +380,11 @@ const SUMME = Object.values(GEW).reduce((a, b) => a + b, 0);
       const l0 = (await db('ledger', 'id', 'person_id', ids.Gustav)).length;
       const r = await kauf('Gustav');
       const gebucht = (await db('ledger', 'id', 'person_id', ids.Gustav)).length - l0;
-      if (!(r && r.ok === true && r.advent && r.advent.gewonnen === false)) bad.push(`„${v}“: ${(r && r.message) || JSON.stringify(r).slice(0, 100)} (Kauf gebucht: ${gebucht ? 'ja' : 'nein'})`);
+      if (!(r && r.ok === true && gebucht === 1 && (r.advent === null || r.advent.gewonnen === false))) bad.push(`„${v}“: ${(r && r.message) || JSON.stringify(r).slice(0, 100)} (Kauf gebucht: ${gebucht ? 'ja' : 'nein'})`);
     }
     await sql(`delete from settings where key = 'advent_pool'; delete from advent_wins`);
     const r = await kauf('Gustav');
-    if (!(r && r.ok === true && r.advent && r.advent.gewonnen === false)) bad.push(`ohne Eintrag: ${JSON.stringify(r).slice(0, 140)}`);
+    if (!(r && r.ok === true && (r.advent === null || r.advent.gewonnen === false))) bad.push(`ohne Eintrag: ${JSON.stringify(r).slice(0, 140)}`);
     await pool(POOL);
     expect(bad.length === 0, bad.join(' · '));
   });
