@@ -104,6 +104,8 @@ begin
   insert into sales(product_id, qty, cents, kind, at) values (pr.id, 1, coalesce(pr.cost_cents, pr.price_cents), 'verlust', now());
   update products set stock = stock - 1 where id = pr.id;
   insert into alerts(text) values ('Adventskalender: ' || (select vorname from persons where id = pid) || ' hat heute ' || pr.name || ' gewonnen');
+  -- Mitteilung ans Handy ohne Namen; wer gewonnen hat, steht auf der Startseite der Verwaltung
+  perform k_notify('Adventskalender: heute gewonnen', 'Gewinn: ' || pr.name || '. Wer gewonnen hat, steht auf der Startseite der Kiosk-App.');
   return jsonb_build_object('tag', today() - von + 1, 'gewonnen', true, 'produkt', pr.name);
 end $$;
 
