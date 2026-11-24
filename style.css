@@ -89,3 +89,4 @@ textarea{min-height:120px;resize:vertical}
   background:none;color:var(--mut);font:inherit;font-size:11px;font-weight:700;line-height:1;cursor:pointer;vertical-align:1px;text-transform:none;letter-spacing:0}
 .ii::after{content:"";position:absolute;inset:-13px}
 .ii{position:relative}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
