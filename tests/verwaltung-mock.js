@@ -11,12 +11,13 @@ const data = {
     { id: 'p3', name: 'Alt', category: 'Süßes', price_cents: 0, sale_cents: null, cost_cents: null, stock: 0, active: false, created_at: '2026-01-01T00:00:00Z' }],
   sales: [{ product_id: 'p1', qty: 20, cents: 2000, kind: 'app', at: ago(5) }, { product_id: 'p2', qty: 2, cents: 160, kind: 'zaehlung', at: ago(3) }],
   journal: [{ id: 'jn1', day: day(-2), text: 'Einkauf Rewe', in_cents: 0, out_cents: 1500, kind: 'einkauf', ref: 'pu1', source: 'app' }, { id: 'jn2', day: day(-40), text: 'Verkauf', in_cents: 3000, out_cents: 0, kind: 'excel', ref: null, source: 'excel' }, { id: 'jn3', day: '2025-12-01', text: 'Verkauf', in_cents: 500, out_cents: 0, kind: 'hand', ref: null, source: 'hand' }],
-  ledger: [{ person_id: 'a', amount_cents: 350, kind: 'kauf', day: day(-1) }, { person_id: 'a', amount_cents: -100, kind: 'zahlung', day: day(0) }],
+  ledger: [{ person_id: 'a', amount_cents: 350, kind: 'kauf', day: day(-1) }, { person_id: 'a', amount_cents: -100, kind: 'zahlung', day: day(0) }, { person_id: 'b', amount_cents: -2000, kind: 'zahlung', day: day(0) }, { person_id: 'b', amount_cents: 150, kind: 'kauf', day: day(0) }],
   persons: [{ id: 'a', vorname: 'Muster', consent_at: '2026-11-01', locked_until: null, active: true }, { id: 'b', vorname: 'Beispiel', consent_at: null, locked_until: new Date(Date.now() + 3e6).toISOString(), active: true }],
   purchase_items: [{ id: 'm1', qty: 6, mhd: day(5), product_id: 'p2' }, { id: 'm2', qty: 0, mhd: day(22), product_id: 'p1' }, { id: 'm3', qty: 0, mhd: day(200), product_id: 'p1' }],
   alerts: [{ id: 'al', at: ago(0), text: 'Anmeldung von Beispiel nach 3 falschen PINs für 1 Stunde gesperrt' }],
   cash_counts: [{ day: day(0), cents: 1820, bar_cents: 1500, at: ago(0) }],
   settings: [{ key: 'kiosk_code', value: 'abc123' }, { key: 'backup_at', value: day(-20) }, { key: 'kiosk_code_at', value: day(-45) }],
+  wishes: [{ id: 'w1', text: 'Mehr Eistee', created_at: '2026-11-24T08:00:00Z', wish_votes: [{ count: 3 }] }],
   requests: [{ id: 'r1', at: ago(0), text: 'Bitte Knopf größer', status: 'neu', answer: null }, { id: 'r2', at: ago(0), text: '8 Produktfotos', status: 'erledigt', answer: 'Eingetragen.' }],
   photo_jobs: [
     { id: 'j1', at: ago(0), paths: ['x'], status: 'vorschlag', result: [{ id: 'p1', qty: 7 }], note: 'Twix verdeckt', kind: 'foto', text: null },
@@ -50,9 +51,9 @@ const data = {
   const closed = () => p.waitForSelector('#modal', { state: 'hidden' });
 
   await p.goto('http://localhost:8765/#verwaltung');
-  await step('Bon', async () => { await p.waitForSelector('text=KASSENSTAND', { timeout: 8000 }); await has('Läuft in 14 Tagen ab (1)', 'Läuft in 30 Tagen ab (1)', 'Unter Einkaufspreis (1)', 'Hinweise', 'Nachbestellen', 'Bitte jetzt sichern', 'An Claude', 'QR-Code erneuern', '45 Tage alt'); });
+  await step('Bon', async () => { await p.waitForSelector('text=KASSENSTAND', { timeout: 8000 }); await has('Läuft in 14 Tagen ab (1)', 'Läuft in 30 Tagen ab (1)', 'Unter Einkaufspreis (1)', 'Hinweise', 'Nachbestellen', 'Bitte jetzt sichern', 'An Claude', 'Guthaben der Kollegen', '18,50', 'QR-Code erneuern', '45 Tage alt'); });
   await p.screenshot({ path: out + '/a-bon.png', fullPage: true });
-  await step('Regal', async () => { await p.click('#nav >> text=Regal'); await has('Cola', 'Alt', 'Vorschlag liegt vor', 'Ampel', 'Preisliste drucken', 'Preisliste · Stand');
+  await step('Regal', async () => { await p.click('#nav >> text=Regal'); await has('Cola', 'Alt', 'Vorschlag liegt vor', 'Wünsche der Kollegen', 'Mehr Eistee', '3×', 'Ampel', 'Preisliste drucken', 'Preisliste · Stand');
     if (await p.isVisible('.sheet.printonly')) throw new Error('Preisliste am Bildschirm sichtbar');
     await p.emulateMedia({ media: 'print' }); const vis = await p.isVisible('.sheet.printonly'), nav = await p.isVisible('#nav'); await p.emulateMedia({ media: 'screen' });
     if (!vis || nav) throw new Error('Druckansicht: Preisliste ' + vis + ', Leiste ' + nav); });
@@ -74,6 +75,7 @@ const data = {
   await step('Kasse: Storno', async () => { await p.waitForSelector('[data-a="a-storno"]'); const n = (await p.$$('[data-a="a-storno"]')).length; if (n !== 2) throw new Error('Storno-Knöpfe: ' + n); await p.click('[data-a="a-storno"] >> nth=0'); await p.waitForSelector('text=Buchung stornieren?'); await p.click('#mform button.pri'); await closed(); });
   await step('Leute', async () => { await p.click('#nav >> text=Leute'); await has('Muster', 'Rangliste Umsatz', 'QR-Code'); if (!(await p.$('.qr img'))) throw new Error('QR fehlt'); });
   await step('Leute: neuer QR-Code', async () => { await p.click('[data-a="a-newcode"]'); await p.waitForSelector('text=Neuen QR-Code erzeugen?'); await p.click('#mform button.pri'); await closed(); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('Neuer QR-Code erzeugt'), null, { timeout: 5000 }); if (!calls.some(c => c.includes('settings') && c.includes('kiosk_code_at'))) throw new Error('nicht gespeichert'); });
+  await step('Leute: Guthaben-Anzeige', async () => { await has('Guthaben 18,50', 'Einzahlung'); });
   await step('Leute: Zahlung', async () => { await p.click('[data-a="a-pay"] >> nth=0'); await p.fill('#f_c', '2,50'); await p.click('#mform button.pri'); await closed(); });
   await p.screenshot({ path: out + '/a-leute.png', fullPage: true });
   console.log('Schreibzugriffe:'); calls.forEach(c => console.log('  ', c));

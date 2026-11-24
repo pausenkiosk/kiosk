@@ -117,12 +117,14 @@ function kRender() {
     `<span class="mut">${p.stock > 0 ? p.stock + ' St' : 'aus'}</span><span>${p.sale ? `<s>${eur(p.normal)}</s> ` : ''}${eur(p.cents)} €</span></button>`).join('')).join('');
   app.innerHTML = `<div class="paper">${head('Schuldschein von ' + esc(s.vorname))}
       ${ln(s.saldo < 0 ? 'DEIN GUTHABEN' : 'OFFEN', eur(Math.abs(s.saldo)) + ' €', 'big')}
-      <p class="small mut">Bezahlen: Betrag dem Betreiber geben, er trägt die Zahlung ein.</p></div>
+      <p class="small mut">${s.saldo < 0 ? 'Einkäufe werden von deinem Guthaben abgezogen. Ist es aufgebraucht, schreibst du wie gewohnt an.' : 'Bezahlen oder Guthaben aufladen: Betrag dem Betreiber geben, er trägt ihn ein.'}</p></div>
     <div class="paper"><h2>Bestand und Anschreiben</h2><p class="small mut">Zum Anschreiben das Produkt antippen.</p>${prod || '<p>Noch keine Produkte freigeschaltet.</p>'}</div>
     <div class="paper"><h2>Deine Buchungen</h2>${s.entries.length ? s.entries.map(e =>
-      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Zahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
+      `<div class="it"><i></i><span>${dshort(e.day)} ${e.kind === 'zahlung' ? 'Einzahlung' : e.kind === 'korrektur' ? 'Korrektur' : 'Kauf'}</span>` +
       `<span>${e.undo ? `<button class="btn sm" data-a="k-undo" data-id="${e.id}">Rückgängig</button>` : ''}</span><span>${e.cents > 0 ? '' : '−'}${eur(Math.abs(e.cents))}</span></div>`).join('')
       : '<p class="mut">Noch nichts gebucht.</p>'}</div>
+    <div class="paper"><h2>Wunsch</h2><p class="small mut">Was fehlt dir im Kiosk? Dein Wunsch geht ohne Namen an den Betreiber.</p>
+      <div class="row"><button class="btn" data-a="k-wish">Wunsch abgeben</button></div></div>
     <div class="paper"><div class="row"><button class="btn" data-a="k-pin">PIN ändern</button><button class="btn" data-a="k-logout">Abmelden</button></div></div>`;
 }
 
@@ -151,6 +153,11 @@ const kActs = {
     await kReload();
   },
   'k-undo': async el => { const r = await rpc('k_undo', { p_token: K.token, p_entry: el.dataset.id }); toast(r.ok ? 'Buchung zurückgenommen.' : 'Zu spät, bitte den Betreiber ansprechen.'); await kReload(); },
+  'k-wish': async () => {
+    const v = await ask('Wunsch abgeben', [{ k: 't', label: 'Welches Produkt soll es im Kiosk geben?', max: 60 }], 'Abschicken');
+    if (!v || v.t.trim().length < 2) return;
+    await rpc('k_wish', { p_token: K.token, p_text: v.t.trim() }); toast('Danke, dein Wunsch ist angekommen.');
+  },
   'k-pin': async () => {
     const v = await ask('PIN ändern', [{ k: 'o', label: 'Alte PIN', type: 'password', mode: 'numeric', max: 4 }, { k: 'n', label: 'Neue PIN (4 Ziffern)', type: 'password', mode: 'numeric', max: 4 }]);
     if (!v) return;
@@ -209,7 +216,7 @@ async function aLoad() {
     SB.from('purchase_items').select('id,qty,mhd,product_id').eq('mhd_done', false).not('mhd', 'is', null).order('mhd'),
     SB.from('alerts').select('id,at,text').eq('seen', false).order('at', { ascending: false }),
     SB.from('cash_counts').select('day,cents,bar_cents,at').order('at', { ascending: false }).limit(2),
-    Promise.resolve({ data: [] }),
+    SB.from('wishes').select('id,text,created_at,wish_votes(count)').eq('done', false),
     SB.from('settings').select('key,value'),
     SB.from('requests').select('id,at,text,status,answer').order('at', { ascending: false }).limit(6),
     SB.from('photo_jobs').select('id,at,paths,status,result,note,kind,text').neq('status', 'fertig').order('at', { ascending: false })
@@ -250,7 +257,9 @@ function vBon() {
   const d = A.d, t = new Date(), ym = iso(t).slice(0, 7);
   const sum = (f, k) => d.journal.filter(f).reduce((a, j) => a + j[k], 0);
   const stand = sum(() => true, 'in_cents') - sum(() => true, 'out_cents');
-  const offen = d.ledger.reduce((a, l) => a + l.amount_cents, 0);
+  const saldi = {}; d.ledger.forEach(l => { saldi[l.person_id] = (saldi[l.person_id] || 0) + l.amount_cents; });
+  const offen = Object.values(saldi).filter(v => v > 0).reduce((a, v) => a + v, 0);
+  const guthaben = -Object.values(saldi).filter(v => v < 0).reduce((a, v) => a + v, 0);
   let fehl = '–';
   if (d.cash.length) {
     const to = new Date(d.cash[0].at).getTime(), from = d.cash[1] ? new Date(d.cash[1].at).getTime() : 0;
@@ -270,6 +279,7 @@ function vBon() {
     ${ln('Einnahmen Monat', eur(sum(j => j.day.startsWith(ym), 'in_cents')))}
     ${ln('Ausgaben Monat', eur(sum(j => j.day.startsWith(ym), 'out_cents')))}
     ${ln('Offene Schuldscheine', eur(offen))}
+    ${guthaben ? ln('Guthaben der Kollegen', eur(guthaben)) : ''}
     ${ln('Fehlbetrag letzte Zählung', fehl)}
     ${d.alerts.length ? '<hr><h2 class="neg">Hinweise</h2>' + d.alerts.map(a => `<div class="it"><i class="lamp r"></i><span>${esc(a.text)} <span class="mut">(${new Date(a.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span></span><span></span><span><button class="btn sm" data-a="a-seen" data-id="${a.id}">OK</button></span></div>`).join('') : ''}
     ${(() => { const a = d.set.kiosk_code_at ? Math.floor((t - pd(d.set.kiosk_code_at)) / 864e5) : 0;
@@ -305,6 +315,9 @@ function vRegal() {
     ${A.counting ? '' : '<input type="file" id="foto" accept="image/*" multiple hidden>' + d.jobs.map(j => `<div class="it"><i class="lamp ${j.status === 'vorschlag' ? 'g' : 'y'}"></i><span>Foto vom ${dshort(j.at.slice(0, 10))}: ${j.status === 'vorschlag' ? 'Vorschlag liegt vor' : 'wartet auf Auswertung'}</span><span></span><span>${j.status === 'vorschlag' ? `<button class="btn sm" data-a="a-job" data-id="${j.id}">Prüfen</button>` : `<button class="btn sm" data-a="a-jobdel" data-id="${j.id}">Löschen</button>`}</span></div>`).join('')}</div>
     ${A.counting ? '' : `<div class="paper sheet printonly">${head('Preisliste · Stand ' + new Date().toLocaleDateString('de-DE'))}${(() => { const g = {}; d.products.filter(p => p.active).forEach(p => { (g[p.category] = g[p.category] || []).push(p); });
       return Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(p => ln(esc(p.name), (p.sale_cents != null ? `<s>${eur(p.price_cents)}</s> ` : '') + eur(p.sale_cents ?? p.price_cents) + ' €')).join('')).join(''); })()}<hr><p class="small">Anschreiben per QR-Code oder bar in die Kasse.</p></div>
+    <div class="paper"><h2>Wünsche der Kollegen</h2>${d.wishes.length ? d.wishes.map(w => ({ ...w, n: (w.wish_votes[0] || {}).count || 0 })).sort((a, b) => b.n - a.n).map(w =>
+      `<div class="it"><i></i><span>${esc(w.text)}</span><span class="mut">${w.n}×</span><span><button class="btn sm" data-a="a-wish" data-id="${w.id}">Erledigt</button></span></div>`).join('') : '<p class="mut">Noch keine Wünsche.</p>'}
+      <p class="small mut">Gleiche Wünsche werden zusammengezählt. Namen werden nicht angezeigt.</p></div>
     <div class="paper"><h2>Ampel</h2>${ln('Rot unter', String(d.rot).replace('.', ',') + ' Wochen')}${ln('Gelb unter', String(d.gelb).replace('.', ',') + ' Wochen')}
       <div class="row"><button class="btn" data-a="a-amp">Schwellen ändern</button></div></div>`}`;
 }
@@ -381,8 +394,8 @@ function vLeute() {
   let qr = '';
   try { const q = qrcode(0, 'M'); q.addData(url); q.make(); qr = `<img src="${q.createDataURL(12, 4)}" alt="QR-Code für den Kiosk">`; } catch { qr = ''; }
   return `<div class="paper"><h2>Schuldscheine</h2>${ps.length ? ps.slice().sort((a, b) => b.saldo - a.saldo).map(p =>
-    `<div class="it"><i class="lamp ${p.locked_until && new Date(p.locked_until) > new Date() ? 'r' : p.consent_at ? 'g' : 'o'}"></i><span>${esc(p.vorname)}</span><span class="${p.saldo > 0 ? '' : 'mut'}">${eur(p.saldo)}</span>
-     <span><button class="btn sm" data-a="a-pay" data-id="${p.id}">Zahlung</button> <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
+    `<div class="it"><i class="lamp ${p.locked_until && new Date(p.locked_until) > new Date() ? 'r' : p.consent_at ? 'g' : 'o'}"></i><span>${esc(p.vorname)}</span><span class="${p.saldo > 0 ? '' : 'mut'}">${p.saldo < 0 ? 'Guthaben ' + eur(-p.saldo) : eur(p.saldo)}</span>
+     <span><button class="btn sm" data-a="a-pay" data-id="${p.id}">Einzahlung</button> <button class="btn sm" data-a="a-more" data-id="${p.id}">…</button></span></div>`).join('') : '<p class="mut">Noch niemand eingetragen.</p>'}
     <p class="small mut">Grün: hat zugestimmt · leer: noch nicht angemeldet · rot: gerade gesperrt</p>
     <div class="row"><button class="btn pri" data-a="a-person">Person eintragen</button><button class="btn" data-a="a-persons">Mehrere als Liste</button></div></div>
     <div class="paper"><h2>Rangliste Umsatz</h2><table><tr><th>Vorname</th><th>30 Tage</th><th>Gesamt</th></tr>${ps.slice().sort((a, b) => b.u30 - a.u30 || b.all - a.all).map(p => `<tr><td>${esc(p.vorname)}</td><td>${eur(p.u30)}</td><td>${eur(p.all)}</td></tr>`).join('')}</table></div>
@@ -457,6 +470,7 @@ const aActs = {
     ok(p.id ? await SB.from('products').update(row).eq('id', p.id) : await SB.from('products').insert(row));
     await reload();
   },
+  'a-wish': async el => { ok(await SB.from('wishes').update({ done: true }).eq('id', el.dataset.id)); await reload(); },
   'a-amp': async () => {
     const v = await ask('Ampel-Schwellen', [{ k: 'r', label: 'Rot, wenn der Bestand weniger als … Wochen reicht', value: A.d.rot, mode: 'decimal' }, { k: 'g', label: 'Gelb, wenn weniger als … Wochen', value: A.d.gelb, mode: 'decimal' }]);
     if (!v) return;
@@ -529,9 +543,14 @@ const aActs = {
   },
   'a-pay': async el => {
     const p = A.d.persons.find(x => x.id === el.dataset.id);
-    const v = await ask('Zahlung von ' + p.vorname, [{ k: 'c', label: 'Erhaltener Betrag €', mode: 'decimal' }], 'Zahlung buchen');
+    const saldo = A.d.ledger.filter(l => l.person_id === p.id).reduce((a, l) => a + l.amount_cents, 0);
+    const v = await ask('Einzahlung von ' + p.vorname, [{ k: 'c', label: 'Erhaltener Betrag €', mode: 'decimal' }], 'Einzahlung buchen',
+      `<p class="small">${saldo > 0 ? `Offen: ${eur(saldo)} €. Alles darüber wird Guthaben.` : saldo < 0 ? `Vorhandenes Guthaben: ${eur(-saldo)} €. Der Betrag kommt dazu.` : 'Nichts offen. Der Betrag wird Guthaben.'}</p>`);
     const c = v && cents(v.c); if (!c || c <= 0) return;
-    await rpc('a_pay', { p_person: p.id, p_cents: c }); toast('Zahlung gebucht.'); await reload();
+    await rpc('a_pay', { p_person: p.id, p_cents: c });
+    const neu = saldo - c;
+    toast(neu < 0 ? `Gebucht. ${p.vorname} hat jetzt ${eur(-neu)} € Guthaben.` : neu > 0 ? `Gebucht. Noch offen: ${eur(neu)} €.` : 'Gebucht. Schuldschein ist ausgeglichen.');
+    await reload();
   },
   'a-more': async el => {
     const p = A.d.persons.find(x => x.id === el.dataset.id);
