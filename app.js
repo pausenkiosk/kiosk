@@ -296,7 +296,7 @@ function vBon() {
   const offen = Object.values(saldi).filter(v => v > 0).reduce((a, v) => a + v, 0);
   const guthaben = -Object.values(saldi).filter(v => v < 0).reduce((a, v) => a + v, 0);
   let fehl = '–';
-  if (d.cash.length) {
+  if (d.cash.length >= 2) { // erst ab dem zweiten Kassensturz gibt es einen Anfangspunkt
     const to = new Date(d.cash[0].at).getTime(), from = d.cash[1] ? new Date(d.cash[1].at).getTime() : 0;
     const ware = d.sales.filter(s => s.kind === 'zaehlung' && new Date(s.at) < to && new Date(s.at) >= from).reduce((a, s) => a + s.cents, 0);
     fehl = eur(ware - (d.cash[0].bar_cents ?? d.cash[0].cents));
