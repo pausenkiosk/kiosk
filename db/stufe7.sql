@@ -36,8 +36,8 @@ end $$;
 insert into settings values ('liefer_min', '300') on conflict do nothing;
 insert into settings values ('advent_von', '2026-12-01') on conflict do nothing;
 insert into settings values ('advent_bis', '2026-12-24') on conflict do nothing;
-insert into settings values ('advent_max_preis', '30') on conflict do nothing;
-insert into settings values ('advent_mhd_bis', '2027-02-28') on conflict do nothing;
+-- Gewinnliste: Namensmuster (% = beliebig) mit Gewicht. Corny Big und Knoppers zusammen 75 %.
+insert into settings values ('advent_pool', '[{"match":"Corny Big%","w":40},{"match":"Knoppers%","w":35},{"match":"Corny Erdbeere%","w":8},{"match":"Golden Bridge%","w":6},{"match":"Choceur Milk%","w":6},{"match":"Kinder Country%","w":5}]') on conflict do nothing;
 
 -- Benachrichtigung an den Betreiber über ntfy (nur wenn ein Kanal eingerichtet ist). Text ohne Namen.
 create or replace function k_notify(p_title text, p_body text) returns void
@@ -67,11 +67,12 @@ end $$;
 
 -- Adventskalender: nach einem Kauf prüfen, ob heute gewonnen wird.
 -- Regeln: höchstens ein Gewinn pro Tag, höchstens 2 pro Person; wer noch nie gewonnen hat, gewinnt zuerst,
--- ein zweiter Gewinn erst ab der zweiten Hälfte des Zeitraums. Gewinn: günstigstes Produkt bis advent_max_preis,
--- dessen Haltbarkeit bis advent_mhd_bis endet und das vorrätig ist; wird als Verlust zum Einkaufspreis gebucht.
+-- ein zweiter Gewinn erst ab der zweiten Hälfte des Zeitraums. Gewinn: aus der Gewinnliste advent_pool
+-- (Namensmuster mit Gewichten); erst wird eine vorrätige Gruppe nach Gewicht gezogen, darin das Produkt mit dem
+-- frühesten Haltbarkeitsdatum. Abgelaufenes ist ausgeschlossen. Wird als Verlust zum Einkaufspreis gebucht.
 create or replace function k_advent(pid uuid) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare von date; bis date; wins int; pr products; mitte date;
+declare von date; bis date; wins int; pr products; mitte date; r numeric; gm text;
 begin
   von := (select value::date from settings where key = 'advent_von');
   bis := (select value::date from settings where key = 'advent_bis');
@@ -81,11 +82,20 @@ begin
   select count(*) into wins from advent_wins where person_id = pid;
   mitte := von + ((bis - von) / 2);
   if wins >= 2 or (wins = 1 and today() < mitte) then return jsonb_build_object('tag', today() - von + 1, 'gewonnen', false); end if;
+  r := random();
+  with g as (
+    select e->>'match' m, (e->>'w')::numeric w
+      from jsonb_array_elements(coalesce((select value::jsonb from settings where key = 'advent_pool'), '[]'::jsonb)) e
+     where (e->>'w')::numeric > 0
+       and exists (select 1 from products p where p.name ilike e->>'match' and p.active and p.stock > 0
+                   and not exists (select 1 from purchase_items i where i.product_id = p.id and not i.mhd_done and i.mhd < today()))),
+  c as (select m, sum(w) over (order by m) cw, sum(w) over () tw from g)
+  select m into gm from c where cw >= r * tw order by cw limit 1;
+  if gm is null then return jsonb_build_object('tag', today() - von + 1, 'gewonnen', false); end if;
   select p.* into pr from products p
-   where p.active and p.stock > 0 and coalesce(p.sale_cents, p.price_cents) <= (select value::int from settings where key = 'advent_max_preis')
-     and exists (select 1 from purchase_items i where i.product_id = p.id and not i.mhd_done
-                 and i.mhd >= today() and i.mhd <= (select value::date from settings where key = 'advent_mhd_bis'))
-   order by (select min(i.mhd) from purchase_items i where i.product_id = p.id and not i.mhd_done and i.mhd >= today()), p.name
+   where p.name ilike gm and p.active and p.stock > 0
+     and not exists (select 1 from purchase_items i where i.product_id = p.id and not i.mhd_done and i.mhd < today())
+   order by (select min(i.mhd) from purchase_items i where i.product_id = p.id and not i.mhd_done) nulls last, p.name
    limit 1 for update;
   if not found then return jsonb_build_object('tag', today() - von + 1, 'gewonnen', false); end if;
   insert into advent_wins(day, person_id, product_id) values (today(), pid, pr.id);
