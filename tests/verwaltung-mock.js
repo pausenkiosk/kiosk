@@ -14,6 +14,7 @@ const data = {
   ledger: [{ person_id: 'a', amount_cents: 350, kind: 'kauf', day: day(-1) }, { person_id: 'a', amount_cents: -100, kind: 'zahlung', day: day(0) }, { person_id: 'b', amount_cents: -2000, kind: 'zahlung', day: day(0) }, { person_id: 'b', amount_cents: 150, kind: 'kauf', day: day(0) }],
   persons: [{ id: 'a', vorname: 'Muster', consent_at: '2026-11-01', locked_until: null, active: true }, { id: 'b', vorname: 'Beispiel', consent_at: null, locked_until: new Date(Date.now() + 3e6).toISOString(), active: true }],
   purchase_items: [{ id: 'm1', qty: 6, mhd: day(5), product_id: 'p2' }, { id: 'm2', qty: 0, mhd: day(22), product_id: 'p1' }, { id: 'm3', qty: 0, mhd: day(200), product_id: 'p1' }],
+  lager: [{ id: 'l1', qty: 12, cents: 2664, mhd: day(400), product_id: 'p1' }],
   alerts: [{ id: 'al', at: ago(0), text: 'Anmeldung von Beispiel nach 3 falschen PINs für 1 Stunde gesperrt' }],
   cash_counts: [{ day: day(0), cents: 1820, bar_cents: 1500, at: ago(0) }],
   settings: [{ key: 'kiosk_code', value: 'abc123' }, { key: 'backup_at', value: day(-20) }, { key: 'kiosk_code_at', value: day(-45) }, { key: 'advent_von', value: day(-3) }, { key: 'advent_bis', value: day(20) }],
@@ -42,6 +43,8 @@ const data = {
     if (u.pathname.includes('/rpc/a_cash_box')) return r.fulfill({ json: { paid: 500, bar: 1320 } });
     if (u.pathname.includes('/rpc/a_storno')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_payout')) return r.fulfill({ json: 'ok' });
+    if (u.pathname.includes('/rpc/a_shelve')) return r.fulfill({ json: null });
+    if (t === 'purchase_items' && u.searchParams.get('lager') === 'eq.true') return r.fulfill({ json: data.lager });
     if (u.pathname.includes('/rpc/a_cleanup')) return r.fulfill({ json: null });
     if (u.pathname.includes('/rpc/a_delivery')) return r.fulfill({ json: 'ok' });
     if (u.pathname.includes('/rpc/a_fix')) return r.fulfill({ json: null });
@@ -70,6 +73,14 @@ const data = {
     if (await p.isVisible('.sheet.printonly')) throw new Error('Preisliste am Bildschirm sichtbar');
     await p.emulateMedia({ media: 'print' }); const vis = await p.isVisible('.sheet.printonly'), nav = await p.isVisible('#nav'); await p.emulateMedia({ media: 'screen' });
     if (!vis || nav) throw new Error('Druckansicht: Preisliste ' + vis + ', Leiste ' + nav); });
+  await step('Bon: Ware im Lager', async () => { await p.click('#nav >> text=Bon'); await has('Ware im Lager', '12 St · 26,64 €'); await p.click('#nav >> text=Regal'); });
+  await step('Regal: Lager ins Regal', async () => { await has('Lager', 'Bezahlt, aber noch nicht im Regal'); await p.click('[data-a="a-shelve"]'); await p.waitForSelector('text=ins Regal');
+    if (await p.inputValue('#f_n') !== '12') throw new Error('Vorschlag ' + await p.inputValue('#f_n'));
+    await p.fill('#f_n', '13'); await p.click('#mform button.pri'); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('1 bis 12'), null, { timeout: 5000 });
+    await p.click('[data-a="a-shelve"]'); await p.fill('#f_n', '5'); await p.click('#mform button.pri'); await closed();
+    await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('5 St im Regal'), null, { timeout: 5000 });
+    if (!calls.some(c => c.includes('a_shelve') && c.includes('"p_qty":5') && c.includes('l1'))) throw new Error('nicht gesendet'); });
+  await p.screenshot({ path: out + '/a-lager.png', fullPage: true });
   await step('Regal: Foto-Vorschlag prüfen', async () => { await p.click('[data-a="a-job"]'); await has('Foto 7', 'Twix verdeckt'); const v = await p.inputValue('[data-cnt="p1"]'); if (v !== '7') throw new Error('Wert ' + v); await p.click('text=Zählung speichern'); await p.waitForSelector('[data-a="a-cnt"]'); });
   await step('Regal: Produkt bearbeiten', async () => { await p.click('button.it:has-text("Cola")'); await p.fill('#f_price', '1,20'); await p.click('#mform button.pri'); await closed(); });
   await step('Regal: Produkt löschen', async () => { await p.waitForTimeout(600); await p.click('button.it:has-text("Alt")'); await p.selectOption('#f_active', 'del'); await p.click('#mform button.pri'); await p.waitForSelector('text=endgültig löschen?'); await p.click('#mform button.pri'); await closed(); });
@@ -81,10 +92,14 @@ const data = {
     if ((await p.$$('#cart .cart')).length !== 2) throw new Error('Zeilen');
     if (await p.inputValue('#cart .cart:nth-child(1) input:nth-of-type(2)') !== '9,48') throw new Error('Preis');
     await p.click('text=Einkauf speichern'); await p.waitForSelector('text=Einkauf von Hand');
+    if (!calls.some(c => c.includes('a_purchase') && !c.includes('lager'))) throw new Error('ohne Lager falsch');
   });
+  await step('Einkauf: ins Lager', async () => { await p.selectOption('#cart .cart:nth-child(1) select', 'p2'); await p.fill('#cart .cart:nth-child(1) input:nth-of-type(1)', '15'); await p.fill('#cart .cart:nth-child(1) input:nth-of-type(2)', '5,37');
+    await p.check('#elager'); await p.click('text=Einkauf speichern'); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('Lager'), null, { timeout: 5000 });
+    if (!calls.some(c => c.includes('a_purchase') && c.includes('"lager":true'))) throw new Error('Lager nicht gesendet'); });
   await step('Einkauf ansagen', async () => { await p.click('text=Einkauf ansagen'); await p.fill('#f_t', 'Bei Rewe 12 Cola für 9,48'); await p.click('#mform button.pri'); await closed(); });
   await step('Kasse', async () => { await p.click('#nav >> text=Kasse'); await has('Einnahmen und Ausgaben', 'Verkauf letzte 4 Wochen', 'Letzte Buchungen'); await p.click('.seg >> text=Woche'); await p.click('.seg >> text=Jahr'); await has('2025'); });
-  await step('Kasse: Ein- und Verkaufspreise', async () => { await has('Ein- und Verkaufspreise', 'Warenwert im Regal'); const tx = await p.textContent('#app'); if (!/Cola\s*0,60\s*1,00\s*0,40\s*40/.test(tx.replace(/\s+/g, ' '))) throw new Error('Zeile Cola falsch'); });
+  await step('Kasse: Ein- und Verkaufspreise', async () => { await has('Ein- und Verkaufspreise', 'Warenwert im Regal', 'Warenwert im Lager (Einkauf)26,64'); const tx = await p.textContent('#app'); if (!/Cola\s*0,60\s*1,00\s*0,40\s*40/.test(tx.replace(/\s+/g, ' '))) throw new Error('Zeile Cola falsch'); });
   await step('Kasse: Kassensturz', async () => { await p.click('[data-a="a-cash"]'); await p.fill('#f_c', '18,20'); await p.click('#mform button.pri'); await closed(); await p.waitForFunction(() => { const t = document.querySelector('#toast').textContent; return t.includes('13,20 € Barverkäufe') && t.includes('5,00 €'); }, null, { timeout: 5000 }); });
   await step('Kasse: Storno', async () => { await p.waitForSelector('[data-a="a-storno"]'); const n = (await p.$$('[data-a="a-storno"]')).length; if (n !== 2) throw new Error('Storno-Knöpfe: ' + n); await p.click('[data-a="a-storno"] >> nth=0'); await p.waitForSelector('text=Buchung stornieren?'); await p.click('#mform button.pri'); await closed(); });
   await step('Leute', async () => { await p.click('#nav >> text=Leute'); await has('Muster', 'Rangliste Umsatz', 'QR-Code'); if (!(await p.$('.qr img'))) throw new Error('QR fehlt'); });
