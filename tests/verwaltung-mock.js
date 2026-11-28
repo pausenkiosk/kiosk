@@ -14,6 +14,8 @@ const data = {
   ledger: [{ person_id: 'a', amount_cents: 350, kind: 'kauf', day: day(-1) }, { person_id: 'a', amount_cents: -100, kind: 'zahlung', day: day(0) }, { person_id: 'b', amount_cents: -2000, kind: 'zahlung', day: day(0) }, { person_id: 'b', amount_cents: 150, kind: 'kauf', day: day(0) }],
   persons: [{ id: 'a', vorname: 'Muster', consent_at: '2026-11-01', locked_until: null, active: true }, { id: 'b', vorname: 'Beispiel', consent_at: null, locked_until: new Date(Date.now() + 3e6).toISOString(), active: true }],
   purchase_items: [{ id: 'm1', qty: 6, mhd: day(5), product_id: 'p2' }, { id: 'm2', qty: 0, mhd: day(22), product_id: 'p1' }, { id: 'm3', qty: 0, mhd: day(200), product_id: 'p1' }],
+  purchases: [{ id: 'pu1', day: day(0), store: 'Edeka', purchase_items: [{ product_id: 'p1', qty: 3, cents: 273, lager: true }, { product_id: 'p2', qty: 2, cents: 228, lager: false }] },
+    ...Array.from({ length: 9 }, (_, i) => ({ id: 'px' + i, day: '2026-09-0' + (i + 1), store: '', purchase_items: [{ product_id: 'p2', qty: 1, cents: 50, lager: false }] }))],
   lager: [{ id: 'l1', qty: 12, cents: 2664, mhd: day(400), product_id: 'p1' }],
   alerts: [{ id: 'al', at: ago(0), text: 'Anmeldung von Beispiel nach 3 falschen PINs für 1 Stunde gesperrt' }],
   cash_counts: [{ day: day(0), cents: 1820, bar_cents: 1500, at: ago(0) }],
@@ -97,6 +99,12 @@ const data = {
   await step('Einkauf: ins Lager', async () => { await p.selectOption('#cart .cart:nth-child(1) select', 'p2'); await p.fill('#cart .cart:nth-child(1) input:nth-of-type(1)', '15'); await p.fill('#cart .cart:nth-child(1) input:nth-of-type(2)', '5,37');
     await p.check('#elager'); await p.click('text=Einkauf speichern'); await p.waitForFunction(() => document.querySelector('#toast').textContent.includes('Lager'), null, { timeout: 5000 });
     if (!calls.some(c => c.includes('a_purchase') && c.includes('"lager":true'))) throw new Error('Lager nicht gesendet'); });
+  await step('Einkauf: Verlauf', async () => { await has('Verlauf', 'Edeka', '3 × Cola (Lager)', '2 × Twix', '5,01 €', 'Rein und raus je Monat', 'Alle 10 zeigen');
+    const tb = (await p.$$eval('table tr', rs => rs.map(r => [...r.children].map(c => c.textContent.trim()).join('|')))).join(' / ');
+    if (!tb.includes('Cola|3|20|') || !tb.includes('Summe|5|22|0')) throw new Error('Monatstabelle: ' + tb.slice(0, 200));
+    await p.click('[data-a="a-vall"]'); await has('ohne Laden', 'Weniger zeigen');
+    await p.click('[data-a="a-vmon"] >> nth=1'); await has('In diesem Monat nichts gekauft oder verkauft.'); await p.click('[data-a="a-vmon"] >> nth=2'); if (!(await p.$$eval('table tr', rs => rs.map(r => [...r.children].map(c => c.textContent.trim()).join('|')))).includes('Twix|9||')) throw new Error('September'); await p.click('[data-a="a-vmon"] >> nth=0'); });
+  await p.screenshot({ path: out + '/a-verlauf.png', fullPage: true });
   await step('Einkauf ansagen', async () => { await p.click('text=Einkauf ansagen'); await p.fill('#f_t', 'Bei Rewe 12 Cola für 9,48'); await p.click('#mform button.pri'); await closed(); });
   await step('Kasse', async () => { await p.click('#nav >> text=Kasse'); await has('Einnahmen und Ausgaben', 'Verkauf letzte 4 Wochen', 'Letzte Buchungen'); await p.click('.seg >> text=Woche'); await p.click('.seg >> text=Jahr'); await has('2025'); });
   await step('Kasse: Ein- und Verkaufspreise', async () => { await has('Ein- und Verkaufspreise', 'Warenwert im Regal', 'Warenwert im Lager (Einkauf)26,64'); const tx = await p.textContent('#app'); if (!/Cola\s*0,60\s*1,00\s*0,40\s*40/.test(tx.replace(/\s+/g, ' '))) throw new Error('Zeile Cola falsch'); });
