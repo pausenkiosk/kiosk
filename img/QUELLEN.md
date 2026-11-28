@@ -32,3 +32,7 @@ Produktfotos von Open Food Facts stehen unter CC BY-SA 3.0 (https://creativecomm
 | Monster Energy Zero | eigenes Foto aus dem Kiosk | – |
 | Knoppers Himbeer-Joghurt | eigenes Foto aus dem Kiosk | – |
 | Choceur Peanut Bits | eigenes Foto aus dem Kiosk | – |
+| Paulaner Cola | eigenes Foto aus dem Kiosk | – |
+| Paulaner Limo Zitrone | eigenes Foto aus dem Kiosk | – |
+| Monster Ultra White | eigenes Foto aus dem Kiosk | – |
+| Monster Absolutely Zero | eigenes Foto aus dem Kiosk | – |
